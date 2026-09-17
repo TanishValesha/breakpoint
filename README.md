@@ -1,8 +1,7 @@
 # Breakpoint
 
-A Chrome extension that tracks reading progress on articles, estimates time
-remaining, and suggests smart places to pause based on the article's own
-structure.
+A Chrome extension that tracks reading progress on articles and estimates
+time remaining, so you know when a good moment to take a break is.
 
 ## Load it locally
 
@@ -14,12 +13,8 @@ structure.
 
 ## Features (v1.1)
 
-- Live reading-progress bar against the detected article content, with a
-  fixed 25/50/75/100 percentage ruler for orientation.
+- Live reading-progress bar against the detected article content.
 - Estimated time remaining (word count ÷ ~200 WPM).
-- Smart breakpoints: section headings in the article are used as suggested
-  pause points, shown as quiet tick markers on the bar (no popups while
-  you're reading).
 - Auto-saved scroll position with a "Resume reading?" prompt on revisit.
 - Reading queue: add the current page from the popup, open or remove later.
 

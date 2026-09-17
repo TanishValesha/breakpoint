@@ -12,23 +12,10 @@
       background: rgba(0,0,0,0.08); z-index: 2147483647;
     }
     .bar-fill {
-      height: 100%; width: 0%; background: #2563eb; transition: width 80ms linear;
+      height: 100%; width: 100%; background: #2563eb;
+      transform: scaleX(0); transform-origin: left;
+      transition: transform 80ms linear;
     }
-    .bar-marker {
-      position: absolute; top: 0; width: 2px; height: 100%;
-      background: rgba(255,255,255,0.85); transform: translateX(-1px);
-    }
-
-    .ruler {
-      position: fixed; top: 4px; left: 0; width: 100%; height: 14px;
-      z-index: 2147483647; pointer-events: none;
-    }
-    .ruler-label {
-      position: absolute; top: 1px; transform: translateX(-50%);
-      font-size: 10px; color: rgba(0,0,0,0.45); background: rgba(255,255,255,0.7);
-      padding: 0 3px; border-radius: 3px;
-    }
-    .ruler-label.end { transform: translateX(-100%); }
 
     .pill {
       position: fixed; top: 10px; right: 16px; z-index: 2147483647;
@@ -56,8 +43,6 @@
     .toast button.dismiss:hover { opacity: 1; }
   `;
 
-  const RULER_STOPS = [25, 50, 75, 100];
-
   let root = null;
   let els = {};
 
@@ -68,20 +53,13 @@
     document.documentElement.appendChild(host);
     root = host.attachShadow({ mode: "open" });
 
-    const rulerLabels = RULER_STOPS.map(
-      (stop) =>
-        `<span class="ruler-label${stop === 100 ? " end" : ""}" style="left:${stop}%">${stop}</span>`
-    ).join("");
-
     root.innerHTML = `
       <style>${STYLES}</style>
       <div class="bar-track"><div class="bar-fill"></div></div>
-      <div class="ruler">${rulerLabels}</div>
       <div class="pill"><span class="pill-text">0% · -- min left</span></div>
       <div class="toast-stack"></div>
     `;
 
-    els.barTrack = root.querySelector(".bar-track");
     els.fill = root.querySelector(".bar-fill");
     els.pillText = root.querySelector(".pill-text");
     els.toastStack = root.querySelector(".toast-stack");
@@ -95,7 +73,7 @@
   function updateProgress(percent, minutesRemaining) {
     if (!root) return;
     const pct = Math.round(percent);
-    els.fill.style.width = pct + "%";
+    els.fill.style.transform = `scaleX(${pct / 100})`;
     const timeLabel =
       minutesRemaining == null
         ? ""
@@ -103,18 +81,6 @@
         ? " · <1 min left"
         : ` · ${Math.round(minutesRemaining)} min left`;
     els.pillText.textContent = `${pct}%${timeLabel}`;
-  }
-
-  function setBreakpointMarkers(breakpoints) {
-    if (!root) return;
-    els.barTrack.querySelectorAll(".bar-marker").forEach((el) => el.remove());
-    (breakpoints || []).forEach((bp) => {
-      const marker = document.createElement("div");
-      marker.className = "bar-marker";
-      marker.style.left = bp.percent + "%";
-      marker.title = bp.label;
-      els.barTrack.appendChild(marker);
-    });
   }
 
   function makeToast(message, { primaryLabel, onPrimary, onDismiss, autoHideMs } = {}) {
@@ -167,7 +133,6 @@
     init,
     setVisible,
     updateProgress,
-    setBreakpointMarkers,
     showResumeToast,
   };
 })();

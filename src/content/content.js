@@ -4,11 +4,8 @@
   const SAVE_DEBOUNCE_MS = 500;
   const MAX_RESUME_ENTRIES = 300;
   const MAX_RESUME_AGE_MS = 90 * 24 * 60 * 60 * 1000;
-  const BREAKPOINT_MIN_PERCENT = 5;
-  const BREAKPOINT_MAX_PERCENT = 95;
-  const BREAKPOINT_MIN_GAP_PERCENT = 8;
 
-  const { findArticleElement, getWordCount, findHeadings } = window.Breakpoint.detect;
+  const { findArticleElement, getWordCount } = window.Breakpoint.detect;
   const ui = window.Breakpoint.ui;
 
   function pageKey() {
@@ -24,7 +21,6 @@
     articleTop: 0,
     scrollableDistance: 1,
     wordCount: 0,
-    breakpoints: [],
     saveTimer: null,
     tickScheduled: false,
     pendingSave: null,
@@ -57,43 +53,11 @@
     state.articleEl = findArticleElement();
     refreshBounds();
     state.wordCount = getWordCount(state.articleEl);
-    computeBreakpoints();
     console.debug("[Breakpoint] detected article:", state.articleEl, {
       height: state.articleEl.offsetHeight,
       scrollableDistance: state.scrollableDistance,
       wordCount: state.wordCount,
-      breakpoints: state.breakpoints,
     });
-  }
-
-  // Section headings are natural pause points. Compute each one's scroll
-  // percentage the same way reading progress is computed, so a breakpoint is
-  // "reached" exactly when the progress bar crosses that value. Headings too
-  // close together (sub-subheadings) are deduped to avoid a toast cluster.
-  function computeBreakpoints() {
-    const headings = findHeadings(state.articleEl);
-    const candidates = headings
-      .map((h) => {
-        const rect = h.element.getBoundingClientRect();
-        const top = rect.top + window.scrollY;
-        const percent = ((top - state.articleTop) / state.scrollableDistance) * 100;
-        return { percent, label: h.label };
-      })
-      .filter(
-        (bp) => bp.percent >= BREAKPOINT_MIN_PERCENT && bp.percent <= BREAKPOINT_MAX_PERCENT
-      )
-      .sort((a, b) => a.percent - b.percent);
-
-    const deduped = [];
-    candidates.forEach((bp) => {
-      const last = deduped[deduped.length - 1];
-      if (!last || bp.percent - last.percent >= BREAKPOINT_MIN_GAP_PERCENT) {
-        deduped.push(bp);
-      }
-    });
-
-    state.breakpoints = deduped;
-    ui.setBreakpointMarkers(state.breakpoints);
   }
 
   // Sites like Medium hydrate/lazy-render article content client-side, so the
