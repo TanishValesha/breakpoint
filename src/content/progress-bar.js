@@ -32,16 +32,33 @@
       background: #1f2937; color: #fff; font-size: 13px; border-radius: 10px;
       padding: 10px 12px; display: flex; align-items: center; gap: 10px;
       box-shadow: 0 2px 8px rgba(0,0,0,0.25); max-width: 280px;
+      animation: bp-toast-in 160ms ease-out;
     }
     .toast button.primary {
       all: unset; cursor: pointer; background: #2563eb; padding: 5px 10px;
       border-radius: 6px; font-size: 12px; white-space: nowrap;
+      transition: background 100ms ease-out;
     }
+    .toast button.primary:hover { background: #1d4ed8; }
     .toast button.dismiss {
-      all: unset; cursor: pointer; opacity: 0.6; font-size: 14px; padding: 0 2px;
+      all: unset; cursor: pointer; opacity: 0.6; display: flex; padding: 3px;
+      border-radius: 4px; transition: opacity 100ms ease-out;
     }
     .toast button.dismiss:hover { opacity: 1; }
+    .toast button.primary:focus-visible,
+    .toast button.dismiss:focus-visible {
+      outline: 2px solid #93c5fd; outline-offset: 2px;
+    }
+    @keyframes bp-toast-in {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .toast { animation: none; }
+    }
   `;
+
+  const CLOSE_ICON = `<svg width="10" height="10" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M1 1L9 9M9 1L1 9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>`;
 
   let root = null;
   let els = {};
@@ -104,7 +121,8 @@
 
     const dismissBtn = document.createElement("button");
     dismissBtn.className = "dismiss";
-    dismissBtn.textContent = "✕";
+    dismissBtn.innerHTML = CLOSE_ICON;
+    dismissBtn.setAttribute("aria-label", "Dismiss");
     dismissBtn.addEventListener("click", () => {
       onDismiss && onDismiss();
       remove();

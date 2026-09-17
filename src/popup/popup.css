@@ -6,6 +6,10 @@ body {
   color: #1f2937;
 }
 
+input[type="checkbox"] {
+  accent-color: #2563eb;
+}
+
 h1 {
   font-size: 14px;
   margin: 0 0 10px;
@@ -45,6 +49,11 @@ h1 {
   border-radius: 6px;
   padding: 4px 8px;
   cursor: pointer;
+  transition: background 100ms ease-out;
+}
+
+.section-header button:hover {
+  background: #1d4ed8;
 }
 
 #queue-list {
@@ -76,21 +85,32 @@ h1 {
 
 #queue-list a:hover {
   text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 #queue-list button {
   all: unset;
   cursor: pointer;
   opacity: 0.5;
-  font-size: 12px;
+  display: flex;
+  padding: 3px;
+  border-radius: 4px;
+  transition: opacity 100ms ease-out;
 }
 
 #queue-list button:hover {
   opacity: 1;
 }
 
+.section-header button:focus-visible,
+#queue-list a:focus-visible,
+#queue-list button:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
 .empty {
   font-size: 12px;
-  opacity: 0.6;
+  color: #6b7280;
   padding: 6px 0;
 }

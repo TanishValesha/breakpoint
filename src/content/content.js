@@ -15,8 +15,16 @@
     return "bp:" + pageKey();
   }
 
+  // Skip the site's own homepage/index — there's no article to track there,
+  // and the widget would just be clutter on a listing page.
+  function isHomePage() {
+    const path = location.pathname.replace(/\/index\.(html?|php)$/i, "/");
+    return path === "/" || path === "";
+  }
+
   const state = {
     enabled: true,
+    onArticlePage: false,
     articleEl: null,
     articleTop: 0,
     scrollableDistance: 1,
@@ -65,6 +73,7 @@
   // Watch for DOM growth and re-detect (debounced) so bounds don't stay stale.
   function watchForContentGrowth() {
     const observer = new MutationObserver(() => {
+      if (!state.onArticlePage) return;
       if (state.growthTimer) clearTimeout(state.growthTimer);
       state.growthTimer = setTimeout(detectAndMeasure, 400);
     });
@@ -76,22 +85,26 @@
     return Math.min(Math.max(raw, 0), 1);
   }
 
+  // Captures the page identity (key/url/title) at schedule time, not flush
+  // time — on an SPA the URL can change before the debounce fires, and we
+  // don't want a stale save landing under the *new* page's storage key.
   function scheduleSave(percent, scrollY) {
-    state.pendingSave = { percent, scrollY, updatedAt: Date.now() };
+    state.pendingSave = {
+      key: resumeStorageKey(),
+      url: location.href,
+      title: document.title,
+      percent,
+      scrollY,
+      updatedAt: Date.now(),
+    };
     if (state.saveTimer) clearTimeout(state.saveTimer);
     state.saveTimer = setTimeout(flushSave, SAVE_DEBOUNCE_MS);
   }
 
   function flushSave() {
     if (!state.pendingSave) return;
-    const entry = {
-      url: location.href,
-      title: document.title,
-      percent: state.pendingSave.percent * 100,
-      scrollY: state.pendingSave.scrollY,
-      updatedAt: state.pendingSave.updatedAt,
-    };
-    storageSet({ [resumeStorageKey()]: entry });
+    const { key, url, title, percent, scrollY, updatedAt } = state.pendingSave;
+    storageSet({ [key]: { url, title, percent: percent * 100, scrollY, updatedAt } });
     state.pendingSave = null;
     maybePruneResumeEntries();
   }
@@ -120,7 +133,7 @@
     state.tickScheduled = true;
     requestAnimationFrame(() => {
       state.tickScheduled = false;
-      if (!state.enabled) return;
+      if (!state.enabled || !state.onArticlePage) return;
 
       refreshBounds();
       const progress = getProgress();
@@ -153,28 +166,60 @@
       if (area !== "local") return;
       if (changes["breakpoint:enabled"]) {
         state.enabled = changes["breakpoint:enabled"].newValue !== false;
-        ui.setVisible(state.enabled);
+        ui.setVisible(state.enabled && state.onArticlePage);
       }
     });
+  }
+
+  // Runs whenever we land on a page — both on the real initial load and on
+  // every client-side navigation an SPA like Medium does afterwards, since
+  // those never reload the document (see watchForUrlChanges).
+  function enterPage() {
+    if (isHomePage()) {
+      state.onArticlePage = false;
+      ui.setVisible(false);
+      return;
+    }
+    state.onArticlePage = true;
+    ui.setVisible(state.enabled);
+    detectAndMeasure();
+    onScroll();
+    // Medium-style SPAs keep hydrating content after navigation; re-detect a
+    // couple more times before the user is likely to have scrolled yet.
+    [1500, 3000].forEach((delay) =>
+      setTimeout(() => {
+        if (state.onArticlePage) detectAndMeasure();
+      }, delay)
+    );
+    checkResumeOnLoad();
+  }
+
+  // Client-side (pushState/replaceState) navigation doesn't fire any event a
+  // content script can listen for, and content scripts run in an isolated
+  // JS world so they can't intercept the page's own history calls either —
+  // polling location.href is the standard, dependency-free way around that.
+  function watchForUrlChanges() {
+    let lastHref = location.href;
+    setInterval(() => {
+      if (location.href === lastHref) return;
+      lastHref = location.href;
+      flushSave();
+      enterPage();
+    }, 1000);
   }
 
   async function init() {
     await loadSettings();
     ui.init();
-    ui.setVisible(state.enabled);
     watchSettingsChanges();
-
-    detectAndMeasure();
-    onScroll();
     watchForContentGrowth();
-    // Medium-style SPAs keep hydrating content after document_idle; re-detect
-    // a couple more times before the user is likely to have scrolled yet.
-    [1500, 3000].forEach((delay) => setTimeout(detectAndMeasure, delay));
+    watchForUrlChanges();
 
-    await checkResumeOnLoad();
+    enterPage();
 
     window.addEventListener("scroll", onScroll, { passive: true });
     window.addEventListener("resize", () => {
+      if (!state.onArticlePage) return;
       detectAndMeasure();
       onScroll();
     });

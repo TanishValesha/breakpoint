@@ -68,6 +68,20 @@ object — there's no module system or bundler, so load order matters:
    unnecessary. Don't reintroduce any of it — toast, ruler, or markers —
    without being explicitly asked.
 
+   The widget is deliberately hidden on a site's own homepage/listing page
+   (`isHomePage()`: pathname is `/` or an equivalent `index.html`/
+   `index.php`), since there's no article to track there. This can't be a
+   one-time check at content-script load: Medium (and SPAs generally) never
+   reload the document on internal navigation, so clicking from the
+   homepage into an article doesn't re-run the content script. `enterPage()`
+   holds all the per-page setup (article detection, resume check, showing/
+   hiding the UI) and re-runs on every navigation via `watchForUrlChanges()`,
+   which polls `location.href` — a content script runs in an isolated JS
+   world, so it cannot intercept the page's own `history.pushState` calls to
+   detect navigation via an event instead. `state.onArticlePage` gates
+   `onScroll`/resize/the growth-observer so they're inert while sitting on a
+   non-article page between navigations.
+
 `src/popup/` (popup.html/js/css) is a separate, independent UI: the on/off
 toggle and reading queue. It talks to `chrome.storage.local` directly and to
 the active tab via the `activeTab` permission — it does not communicate with
