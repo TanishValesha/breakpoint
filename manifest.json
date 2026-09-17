@@ -1,0 +1,31 @@
+{
+  "manifest_version": 3,
+  "name": "Breakpoint - Reading Progress",
+  "version": "0.1.0",
+  "description": "Tracks reading progress on articles, estimates time remaining, and lets you save breakpoints to resume later.",
+  "permissions": ["storage", "activeTab"],
+  "content_scripts": [
+    {
+      "matches": ["http://*/*", "https://*/*"],
+      "js": [
+        "src/content/article-detect.js",
+        "src/content/progress-bar.js",
+        "src/content/content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "src/popup/popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}
