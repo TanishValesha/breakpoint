@@ -73,9 +73,6 @@ on other sites without needing to re-instrument the code.
 
 ## Verification
 
-Not yet confirmed against live Medium (see note above on missing browser
-access in the dev environment). Next step: reload the unpacked extension in
-`chrome://extensions`, open a Medium article, and confirm the bar advances
-proportionally with scrolling instead of jumping to 100% immediately. If it
-still misbehaves, check the DevTools console for the `[Breakpoint] detected
-article:` log to see what element/height was actually measured.
+Confirmed fixed on Medium: after reloading the unpacked extension, the
+progress bar now advances proportionally with scrolling instead of jumping
+to 100% on the first scroll.
