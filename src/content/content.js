@@ -2,11 +2,13 @@
 (function () {
   const WPM = 200;
   const SAVE_DEBOUNCE_MS = 500;
-  const MAX_MANUAL_BREAKPOINTS = 5;
   const MAX_RESUME_ENTRIES = 300;
   const MAX_RESUME_AGE_MS = 90 * 24 * 60 * 60 * 1000;
+  const BREAKPOINT_MIN_PERCENT = 5;
+  const BREAKPOINT_MAX_PERCENT = 95;
+  const BREAKPOINT_MIN_GAP_PERCENT = 8;
 
-  const { findArticleElement, getWordCount } = window.Breakpoint.detect;
+  const { findArticleElement, getWordCount, findHeadings } = window.Breakpoint.detect;
   const ui = window.Breakpoint.ui;
 
   function pageKey() {
@@ -15,19 +17,14 @@
   function resumeStorageKey() {
     return "bp:" + pageKey();
   }
-  function manualStorageKey() {
-    return "bpManual:" + pageKey();
-  }
 
   const state = {
     enabled: true,
-    breakTarget: 75,
     articleEl: null,
     articleTop: 0,
     scrollableDistance: 1,
     wordCount: 0,
-    notifiedThisView: false,
-    manualBreakpoints: [],
+    breakpoints: [],
     saveTimer: null,
     tickScheduled: false,
     pendingSave: null,
@@ -60,11 +57,43 @@
     state.articleEl = findArticleElement();
     refreshBounds();
     state.wordCount = getWordCount(state.articleEl);
+    computeBreakpoints();
     console.debug("[Breakpoint] detected article:", state.articleEl, {
       height: state.articleEl.offsetHeight,
       scrollableDistance: state.scrollableDistance,
       wordCount: state.wordCount,
+      breakpoints: state.breakpoints,
     });
+  }
+
+  // Section headings are natural pause points. Compute each one's scroll
+  // percentage the same way reading progress is computed, so a breakpoint is
+  // "reached" exactly when the progress bar crosses that value. Headings too
+  // close together (sub-subheadings) are deduped to avoid a toast cluster.
+  function computeBreakpoints() {
+    const headings = findHeadings(state.articleEl);
+    const candidates = headings
+      .map((h) => {
+        const rect = h.element.getBoundingClientRect();
+        const top = rect.top + window.scrollY;
+        const percent = ((top - state.articleTop) / state.scrollableDistance) * 100;
+        return { percent, label: h.label };
+      })
+      .filter(
+        (bp) => bp.percent >= BREAKPOINT_MIN_PERCENT && bp.percent <= BREAKPOINT_MAX_PERCENT
+      )
+      .sort((a, b) => a.percent - b.percent);
+
+    const deduped = [];
+    candidates.forEach((bp) => {
+      const last = deduped[deduped.length - 1];
+      if (!last || bp.percent - last.percent >= BREAKPOINT_MIN_GAP_PERCENT) {
+        deduped.push(bp);
+      }
+    });
+
+    state.breakpoints = deduped;
+    ui.setBreakpointMarkers(state.breakpoints);
   }
 
   // Sites like Medium hydrate/lazy-render article content client-side, so the
@@ -136,11 +165,6 @@
 
       ui.updateProgress(progress * 100, minutesRemaining);
       scheduleSave(progress, window.scrollY);
-
-      if (!state.notifiedThisView && progress * 100 >= state.breakTarget) {
-        state.notifiedThisView = true;
-        ui.showBreakToast(state.breakTarget);
-      }
     });
   }
 
@@ -155,48 +179,9 @@
     });
   }
 
-  async function loadManualBreakpoints() {
-    const data = await storageGet(manualStorageKey());
-    state.manualBreakpoints = data[manualStorageKey()] || [];
-    renderBreakpointsPanel();
-  }
-
-  function renderBreakpointsPanel() {
-    ui.renderBreakpoints(state.manualBreakpoints, jumpToBreakpoint, removeBreakpoint);
-  }
-
-  function jumpToBreakpoint(bp) {
-    window.scrollTo({ top: bp.scrollY, behavior: "smooth" });
-  }
-
-  async function removeBreakpoint(bp) {
-    state.manualBreakpoints = state.manualBreakpoints.filter(
-      (b) => b.savedAt !== bp.savedAt
-    );
-    await storageSet({ [manualStorageKey()]: state.manualBreakpoints });
-    renderBreakpointsPanel();
-  }
-
-  async function handleSaveBreakpoint() {
-    const progress = getProgress();
-    const entry = {
-      percent: progress * 100,
-      scrollY: window.scrollY,
-      savedAt: Date.now(),
-    };
-    state.manualBreakpoints.push(entry);
-    if (state.manualBreakpoints.length > MAX_MANUAL_BREAKPOINTS) {
-      state.manualBreakpoints = state.manualBreakpoints.slice(-MAX_MANUAL_BREAKPOINTS);
-    }
-    await storageSet({ [manualStorageKey()]: state.manualBreakpoints });
-    ui.showSavedToast();
-    renderBreakpointsPanel();
-  }
-
   async function loadSettings() {
-    const data = await storageGet(["breakpoint:enabled", "breakpoint:breakTarget"]);
+    const data = await storageGet("breakpoint:enabled");
     state.enabled = data["breakpoint:enabled"] !== false;
-    state.breakTarget = data["breakpoint:breakTarget"] || 75;
   }
 
   function watchSettingsChanges() {
@@ -205,10 +190,6 @@
       if (changes["breakpoint:enabled"]) {
         state.enabled = changes["breakpoint:enabled"].newValue !== false;
         ui.setVisible(state.enabled);
-      }
-      if (changes["breakpoint:breakTarget"]) {
-        state.breakTarget = changes["breakpoint:breakTarget"].newValue || 75;
-        state.notifiedThisView = false;
       }
     });
   }
@@ -227,9 +208,6 @@
     [1500, 3000].forEach((delay) => setTimeout(detectAndMeasure, delay));
 
     await checkResumeOnLoad();
-    await loadManualBreakpoints();
-
-    ui.onSaveBreakpointClick(handleSaveBreakpoint);
 
     window.addEventListener("scroll", onScroll, { passive: true });
     window.addEventListener("resize", () => {

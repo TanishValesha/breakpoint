@@ -1,5 +1,5 @@
-// Injects the progress bar, toasts, and breakpoints panel inside a Shadow DOM
-// so nothing leaks into (or is affected by) the host page's styles.
+// Injects the progress bar and toasts inside a Shadow DOM so nothing leaks
+// into (or is affected by) the host page's styles.
 (function () {
   window.Breakpoint = window.Breakpoint || {};
 
@@ -14,34 +14,28 @@
     .bar-fill {
       height: 100%; width: 0%; background: #2563eb; transition: width 80ms linear;
     }
+    .bar-marker {
+      position: absolute; top: 0; width: 2px; height: 100%;
+      background: rgba(255,255,255,0.85); transform: translateX(-1px);
+    }
+
+    .ruler {
+      position: fixed; top: 4px; left: 0; width: 100%; height: 14px;
+      z-index: 2147483647; pointer-events: none;
+    }
+    .ruler-label {
+      position: absolute; top: 1px; transform: translateX(-50%);
+      font-size: 10px; color: rgba(0,0,0,0.45); background: rgba(255,255,255,0.7);
+      padding: 0 3px; border-radius: 3px;
+    }
+    .ruler-label.end { transform: translateX(-100%); }
 
     .pill {
       position: fixed; top: 10px; right: 16px; z-index: 2147483647;
       background: #1f2937; color: #fff; font-size: 12px; line-height: 1.4;
-      border-radius: 999px; padding: 6px 10px; display: flex; align-items: center;
-      gap: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.25); opacity: 0.92;
+      border-radius: 999px; padding: 6px 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+      opacity: 0.92;
     }
-    .pill button {
-      all: unset; cursor: pointer; font-size: 11px; padding: 3px 8px;
-      border-radius: 999px; background: rgba(255,255,255,0.15);
-    }
-    .pill button:hover { background: rgba(255,255,255,0.28); }
-
-    .panel {
-      position: fixed; top: 44px; right: 16px; z-index: 2147483647;
-      background: #1f2937; color: #fff; font-size: 12px; border-radius: 10px;
-      padding: 8px; width: 220px; box-shadow: 0 2px 8px rgba(0,0,0,0.25);
-      display: none; max-height: 200px; overflow-y: auto;
-    }
-    .panel.open { display: block; }
-    .panel-item {
-      display: flex; justify-content: space-between; align-items: center;
-      padding: 6px 4px; border-radius: 6px; cursor: pointer;
-    }
-    .panel-item:hover { background: rgba(255,255,255,0.1); }
-    .panel-empty { opacity: 0.6; padding: 6px 4px; }
-    .panel-remove { all: unset; cursor: pointer; opacity: 0.6; padding: 0 4px; }
-    .panel-remove:hover { opacity: 1; }
 
     .toast-stack {
       position: fixed; bottom: 20px; right: 16px; z-index: 2147483647;
@@ -62,9 +56,10 @@
     .toast button.dismiss:hover { opacity: 1; }
   `;
 
+  const RULER_STOPS = [25, 50, 75, 100];
+
   let root = null;
   let els = {};
-  let breakpointsPanelOpen = false;
 
   function init() {
     if (root) return;
@@ -73,29 +68,23 @@
     document.documentElement.appendChild(host);
     root = host.attachShadow({ mode: "open" });
 
+    const rulerLabels = RULER_STOPS.map(
+      (stop) =>
+        `<span class="ruler-label${stop === 100 ? " end" : ""}" style="left:${stop}%">${stop}</span>`
+    ).join("");
+
     root.innerHTML = `
       <style>${STYLES}</style>
       <div class="bar-track"><div class="bar-fill"></div></div>
-      <div class="pill">
-        <span class="pill-text">0% · -- min left</span>
-        <button class="save-btn">Save</button>
-        <button class="toggle-btn">Breakpoints</button>
-      </div>
-      <div class="panel"><div class="panel-empty">No saved breakpoints yet</div></div>
+      <div class="ruler">${rulerLabels}</div>
+      <div class="pill"><span class="pill-text">0% · -- min left</span></div>
       <div class="toast-stack"></div>
     `;
 
+    els.barTrack = root.querySelector(".bar-track");
     els.fill = root.querySelector(".bar-fill");
     els.pillText = root.querySelector(".pill-text");
-    els.saveBtn = root.querySelector(".save-btn");
-    els.toggleBtn = root.querySelector(".toggle-btn");
-    els.panel = root.querySelector(".panel");
     els.toastStack = root.querySelector(".toast-stack");
-
-    els.toggleBtn.addEventListener("click", () => {
-      breakpointsPanelOpen = !breakpointsPanelOpen;
-      els.panel.classList.toggle("open", breakpointsPanelOpen);
-    });
   }
 
   function setVisible(visible) {
@@ -116,39 +105,16 @@
     els.pillText.textContent = `${pct}%${timeLabel}`;
   }
 
-  function onSaveBreakpointClick(handler) {
-    els.saveBtn.addEventListener("click", handler);
-  }
-
-  function renderBreakpoints(list, onJump, onRemove) {
+  function setBreakpointMarkers(breakpoints) {
     if (!root) return;
-    els.panel.innerHTML = "";
-    if (!list || list.length === 0) {
-      els.panel.innerHTML = `<div class="panel-empty">No saved breakpoints yet</div>`;
-      return;
-    }
-    list
-      .slice()
-      .reverse()
-      .forEach((bp) => {
-        const item = document.createElement("div");
-        item.className = "panel-item";
-        const when = new Date(bp.savedAt).toLocaleTimeString([], {
-          hour: "2-digit",
-          minute: "2-digit",
-        });
-        item.innerHTML = `<span>${Math.round(bp.percent)}% · ${when}</span>`;
-        item.addEventListener("click", (e) => {
-          if (e.target.closest(".panel-remove")) return;
-          onJump(bp);
-        });
-        const removeBtn = document.createElement("button");
-        removeBtn.className = "panel-remove";
-        removeBtn.textContent = "✕";
-        removeBtn.addEventListener("click", () => onRemove(bp));
-        item.appendChild(removeBtn);
-        els.panel.appendChild(item);
-      });
+    els.barTrack.querySelectorAll(".bar-marker").forEach((el) => el.remove());
+    (breakpoints || []).forEach((bp) => {
+      const marker = document.createElement("div");
+      marker.className = "bar-marker";
+      marker.style.left = bp.percent + "%";
+      marker.title = bp.label;
+      els.barTrack.appendChild(marker);
+    });
   }
 
   function makeToast(message, { primaryLabel, onPrimary, onDismiss, autoHideMs } = {}) {
@@ -197,24 +163,11 @@
     });
   }
 
-  function showBreakToast(target) {
-    makeToast(`You've hit your ${target}% breakpoint — good spot to pause?`, {
-      autoHideMs: 8000,
-    });
-  }
-
-  function showSavedToast() {
-    makeToast("Breakpoint saved", { autoHideMs: 2500 });
-  }
-
   window.Breakpoint.ui = {
     init,
     setVisible,
     updateProgress,
-    onSaveBreakpointClick,
-    renderBreakpoints,
+    setBreakpointMarkers,
     showResumeToast,
-    showBreakToast,
-    showSavedToast,
   };
 })();

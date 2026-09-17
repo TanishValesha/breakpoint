@@ -101,5 +101,12 @@
     return text.split(/\s+/).length;
   }
 
-  window.Breakpoint.detect = { findArticleElement, getWordCount };
+  // Section headings within the article are natural "good place to pause" points.
+  function findHeadings(el) {
+    return Array.from(el.querySelectorAll("h2, h3"))
+      .map((heading) => ({ element: heading, label: (heading.innerText || "").trim() }))
+      .filter((h) => h.label.length > 0);
+  }
+
+  window.Breakpoint.detect = { findArticleElement, getWordCount, findHeadings };
 })();

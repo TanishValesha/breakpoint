@@ -23,10 +23,6 @@ h1 {
   flex: 1;
 }
 
-.row input[type="number"] {
-  width: 48px;
-}
-
 .section {
   margin-top: 12px;
   border-top: 1px solid #e5e7eb;

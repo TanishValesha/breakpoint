@@ -8,26 +8,16 @@ function storageSet(items) {
 }
 
 const enabledToggle = document.getElementById("enabled-toggle");
-const breakTargetInput = document.getElementById("break-target");
 const addCurrentBtn = document.getElementById("add-current");
 const queueListEl = document.getElementById("queue-list");
 
 async function loadSettings() {
-  const data = await storageGet(["breakpoint:enabled", "breakpoint:breakTarget"]);
+  const data = await storageGet("breakpoint:enabled");
   enabledToggle.checked = data["breakpoint:enabled"] !== false;
-  breakTargetInput.value = data["breakpoint:breakTarget"] || 75;
 }
 
 enabledToggle.addEventListener("change", () => {
   storageSet({ "breakpoint:enabled": enabledToggle.checked });
-});
-
-breakTargetInput.addEventListener("change", () => {
-  let value = parseInt(breakTargetInput.value, 10);
-  if (isNaN(value)) value = 75;
-  value = Math.min(Math.max(value, 1), 99);
-  breakTargetInput.value = value;
-  storageSet({ "breakpoint:breakTarget": value });
 });
 
 async function loadQueue() {
