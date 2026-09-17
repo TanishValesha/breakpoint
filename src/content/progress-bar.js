@@ -10,17 +10,20 @@
     .bar-track {
       position: fixed; top: 0; left: 0; width: 100%; height: 4px;
       background: rgba(0,0,0,0.08); z-index: 2147483647;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.06);
     }
     .bar-fill {
-      height: 100%; width: 100%; background: #2563eb;
+      height: 100%; width: 100%;
+      background: linear-gradient(90deg, #2563eb, #3b82f6);
       transform: scaleX(0); transform-origin: left;
       transition: transform 80ms linear;
     }
 
     .pill {
       position: fixed; top: 10px; right: 16px; z-index: 2147483647;
-      background: #1f2937; color: #fff; font-size: 12px; line-height: 1.4;
-      border-radius: 999px; padding: 6px 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+      background: #1f2937; color: #fff; font-size: 12px; font-weight: 500;
+      line-height: 1.4; letter-spacing: 0.01em;
+      border-radius: 999px; padding: 6px 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.25);
       opacity: 0.92;
     }
 
