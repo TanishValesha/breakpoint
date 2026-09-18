@@ -4,7 +4,7 @@
   const SAVE_DEBOUNCE_MS = 500;
   const MAX_RESUME_ENTRIES = 300;
   const MAX_RESUME_AGE_MS = 90 * 24 * 60 * 60 * 1000;
-  const BREAK_NUDGE_THRESHOLD_MS = 15 * 60 * 1000;
+  const DEFAULT_NUDGE_THRESHOLD_MS = 15 * 60 * 1000;
   const SCROLL_IDLE_MS = 2500;
 
   const { findArticleElement, getWordCount } = window.Breakpoint.detect;
@@ -51,8 +51,12 @@
     // it always reflects "how long on *this* article", not the all-time sum.
     sessionElapsedMs: 0,
     nudgeEnabled: true,
+    nudgeThresholdMs: DEFAULT_NUDGE_THRESHOLD_MS,
     lastScrollAt: 0,
-    breakNudgeShown: false,
+    // How many interval boundaries have already triggered a nudge this
+    // article view — lets the reminder repeat every `nudgeThresholdMs`
+    // instead of firing only once.
+    nudgeIntervalsFired: 0,
   };
 
   function storageGet(keys) {
@@ -182,11 +186,13 @@
       "breakpoint:enabled",
       "breakpoint:timerEnabled",
       "breakpoint:nudgeEnabled",
+      "breakpoint:nudgeThresholdMs",
       "breakpoint:timerPaused",
     ]);
     state.enabled = data["breakpoint:enabled"] !== false;
     state.timerEnabled = data["breakpoint:timerEnabled"] !== false;
     state.nudgeEnabled = data["breakpoint:nudgeEnabled"] !== false;
+    state.nudgeThresholdMs = data["breakpoint:nudgeThresholdMs"] || DEFAULT_NUDGE_THRESHOLD_MS;
     state.timerManuallyPaused = !!data["breakpoint:timerPaused"];
   }
 
@@ -204,6 +210,10 @@
       }
       if (changes["breakpoint:nudgeEnabled"]) {
         state.nudgeEnabled = changes["breakpoint:nudgeEnabled"].newValue !== false;
+      }
+      if (changes["breakpoint:nudgeThresholdMs"]) {
+        state.nudgeThresholdMs =
+          changes["breakpoint:nudgeThresholdMs"].newValue || DEFAULT_NUDGE_THRESHOLD_MS;
       }
       if (changes["breakpoint:timerPaused"]) {
         state.timerManuallyPaused = !!changes["breakpoint:timerPaused"].newValue;
@@ -278,21 +288,23 @@
     await storageSet({ "breakpoint:timerTotalMs": current + owed });
   }
 
-  // Fires once per article view: only once real reading time has piled up
-  // on *this* view AND the reader isn't actively mid-scroll, so it lands in
-  // a natural lull rather than interrupting. Deliberately uses the
-  // per-session counter, not the lifetime total — otherwise, once your
-  // lifetime total ever crosses the threshold, this would fire on every
-  // single article you open forever. See CLAUDE.md for why this is a toast
-  // despite the earlier heading-crossing nudge being removed — the trigger
-  // here is rare (once, time-based) rather than constant.
+  // Repeats every `nudgeThresholdMs` of active reading on *this* article
+  // view — 15 min preset means a nudge at 15, 30, 45 min, and so on — but
+  // only ever fires once per interval boundary crossed, and only once the
+  // reader isn't actively mid-scroll, so it lands in a natural lull rather
+  // than interrupting. Deliberately uses the per-session counter, not the
+  // lifetime total — otherwise, once your lifetime total ever crosses the
+  // threshold, this would fire on every single article you open forever.
+  // See CLAUDE.md for why this is a toast despite the earlier
+  // heading-crossing nudge being removed — that one fired constantly
+  // (every heading); this one is rare and paced to actual reading time.
   function maybeShowBreakNudge() {
-    if (state.breakNudgeShown) return;
     if (!state.enabled || !state.timerEnabled || !state.nudgeEnabled) return;
     const sessionElapsed = getCurrentSessionElapsedMs();
-    if (sessionElapsed < BREAK_NUDGE_THRESHOLD_MS) return;
+    const intervalsPassed = Math.floor(sessionElapsed / state.nudgeThresholdMs);
+    if (intervalsPassed <= state.nudgeIntervalsFired) return;
     if (Date.now() - state.lastScrollAt < SCROLL_IDLE_MS) return;
-    state.breakNudgeShown = true;
+    state.nudgeIntervalsFired = intervalsPassed;
     ui.showBreakNudgeToast(Math.round(sessionElapsed / 60000));
   }
 
@@ -322,7 +334,7 @@
     // global lifetime total lives only in storage and is untouched here.
     // Pause is a deliberate global setting, so it intentionally carries
     // over across article navigation instead of auto-clearing.
-    state.breakNudgeShown = false;
+    state.nudgeIntervalsFired = 0;
     state.sessionElapsedMs = 0;
     state.lastScrollAt = Date.now();
     // Actually starts the clock now that we're on an article page — without

@@ -123,6 +123,42 @@ input[type="checkbox"]:focus-visible {
   color: #4b5563;
 }
 
+.nudge-presets {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.preset-btn {
+  font-size: 11px;
+  border: none;
+  background: #e5e7eb;
+  color: #1f2937;
+  border-radius: 6px;
+  padding: 4px 0;
+  cursor: pointer;
+  transition: background 100ms ease-out, color 100ms ease-out;
+}
+
+.preset-btn:hover {
+  background: #d1d5db;
+}
+
+.preset-btn.active {
+  background: #2563eb;
+  color: #fff;
+}
+
+.preset-btn.active:hover {
+  background: #1d4ed8;
+}
+
+.preset-btn:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
 #timer-readout {
   font-size: 16px;
   font-weight: 600;

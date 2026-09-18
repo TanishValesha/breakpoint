@@ -121,16 +121,29 @@ object — there's no module system or bundler, so load order matters:
    case where `chrome.storage.onChanged` also clears `unflushedDeltaMs` —
    any other change to that key (another tab's own flush) is left alone.
 
-   **Break-reminder nudge**: `maybeShowBreakNudge()` runs from the same
-   1-second tick as the timer display and fires `ui.showBreakNudgeToast()`
-   (a toast with a pulsing glow animation, `prefers-reduced-motion`-aware)
-   once per article view, only when *both* `sessionElapsedMs` has crossed
-   `BREAK_NUDGE_THRESHOLD_MS` (15 min) *and* `state.lastScrollAt` (updated on
-   every scroll event) is more than `SCROLL_IDLE_MS` (2.5s) in the past —
-   i.e. only in a natural pause, not mid-scroll. Gated by its own
-   `breakpoint:nudgeEnabled` setting, independent of the timer's on/off
-   toggle. `state.breakNudgeShown` resets in `enterPage()` alongside
-   `sessionElapsedMs`.
+   **Break-reminder nudge — repeats on an interval**: `maybeShowBreakNudge()`
+   runs from the same 1-second tick as the timer display and fires
+   `ui.showBreakNudgeToast()` (a toast with a pulsing glow animation,
+   `prefers-reduced-motion`-aware) every time `sessionElapsedMs` crosses
+   another multiple of `state.nudgeThresholdMs` — a 15-min interval nudges
+   at 15, 30, 45 min, and so on, not just once. `state.nudgeIntervalsFired`
+   tracks how many boundaries have already fired
+   (`Math.floor(sessionElapsed / nudgeThresholdMs)` vs. that counter) so
+   each boundary still only nudges once, and it resets to 0 in `enterPage()`
+   alongside `sessionElapsedMs`. Each nudge additionally requires
+   `state.lastScrollAt` (updated on every scroll event) to be more than
+   `SCROLL_IDLE_MS` (2.5s) in the past — i.e. it waits for a natural pause
+   rather than interrupting mid-scroll; if you're actively scrolling right
+   when a boundary is crossed, it simply nudges at the next idle moment
+   instead of skipping that interval. The interval is user-configurable
+   from the popup as one of six presets (5/10/15/20/25/30 min, stored in
+   `breakpoint:nudgeThresholdMs`; `DEFAULT_NUDGE_THRESHOLD_MS` is the 15-min
+   fallback) — presets rather than a free-text input, deliberately: this
+   project already tried a free numeric input for a related setting (the old
+   "Break target %" field) and it was fully removed later; every control
+   that has stuck since has been a discrete choice (toggle or preset). Gated
+   by its own `breakpoint:nudgeEnabled` setting, independent of the timer's
+   on/off toggle.
 
 `src/popup/` (popup.html/js/css) is a separate, independent UI: the on/off
 toggle, the reading queue, and the timer's enable/pause/resume/reset
@@ -149,6 +162,8 @@ control genuinely needs it again.)
 - `breakpoint:timerEnabled` / `breakpoint:nudgeEnabled` (bool) — global,
   independent on/off switches for the reading-timer readout and the
   break-reminder toast, respectively.
+- `breakpoint:nudgeThresholdMs` (number) — the break-reminder repeat
+  interval, set via one of six presets (5/10/15/20/25/30 min) in the popup.
 - `breakpoint:timerTotalMs` (number) — the lifetime reading-timer total;
   grows forever until reset from the popup.
 - `breakpoint:timerPaused` (bool) — global pause for the lifetime timer.

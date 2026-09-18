@@ -1,4 +1,5 @@
 const QUEUE_KEY = "breakpoint:queue";
+const DEFAULT_NUDGE_THRESHOLD_MS = 15 * 60 * 1000;
 const CLOSE_ICON = `<svg width="10" height="10" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M1 1L9 9M9 1L1 9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>`;
 
 function storageGet(keys) {
@@ -16,16 +17,25 @@ const timerPauseResumeBtn = document.getElementById("timer-pause-resume");
 const timerResetBtn = document.getElementById("timer-reset");
 const addCurrentBtn = document.getElementById("add-current");
 const queueListEl = document.getElementById("queue-list");
+const nudgePresetButtons = Array.from(document.querySelectorAll(".preset-btn"));
 
 async function loadSettings() {
   const data = await storageGet([
     "breakpoint:enabled",
     "breakpoint:timerEnabled",
     "breakpoint:nudgeEnabled",
+    "breakpoint:nudgeThresholdMs",
   ]);
   enabledToggle.checked = data["breakpoint:enabled"] !== false;
   timerEnabledToggle.checked = data["breakpoint:timerEnabled"] !== false;
   nudgeEnabledToggle.checked = data["breakpoint:nudgeEnabled"] !== false;
+
+  const activeMinutes = Math.round(
+    (data["breakpoint:nudgeThresholdMs"] || DEFAULT_NUDGE_THRESHOLD_MS) / 60000
+  );
+  nudgePresetButtons.forEach((btn) => {
+    btn.classList.toggle("active", Number(btn.dataset.minutes) === activeMinutes);
+  });
 }
 
 enabledToggle.addEventListener("change", () => {
@@ -38,6 +48,14 @@ timerEnabledToggle.addEventListener("change", () => {
 
 nudgeEnabledToggle.addEventListener("change", () => {
   storageSet({ "breakpoint:nudgeEnabled": nudgeEnabledToggle.checked });
+});
+
+nudgePresetButtons.forEach((btn) => {
+  btn.addEventListener("click", () => {
+    const minutes = Number(btn.dataset.minutes);
+    storageSet({ "breakpoint:nudgeThresholdMs": minutes * 60000 });
+    nudgePresetButtons.forEach((b) => b.classList.toggle("active", b === btn));
+  });
 });
 
 function formatElapsed(ms) {

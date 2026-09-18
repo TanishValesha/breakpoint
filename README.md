@@ -19,9 +19,9 @@ time remaining, so you know when a good moment to take a break is.
   the popup separately shows your all-time total across every article,
   which keeps growing until you reset it — with enable/pause/resume/reset
   controls there.
-- Break reminder: after 15 minutes of active reading on one article, once
-  you pause scrolling, a one-time toast suggests it's a good time for a
-  break.
+- Break reminder: a toast every N minutes of active reading on one article
+  (once you pause scrolling, so it never interrupts mid-read) — pick the
+  interval from six presets (5/10/15/20/25/30 min) in the popup.
 - Auto-saved scroll position with a "Resume reading?" prompt on revisit.
 - Reading queue: add the current page from the popup, open or remove later.
 
