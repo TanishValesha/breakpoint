@@ -40,14 +40,17 @@ object — there's no module system or bundler, so load order matters:
    `<main>` tag → small hostname→selector override map (e.g. Substack) →
    a dependency-free, trimmed Arc90/Readability-style scorer (paragraph
    density minus link density, adjusted by class/id keyword hints) →
-   `document.body` as a last-resort fallback. Also exposes word counting.
+   `document.body` as a last-resort fallback. Also exposes word counting and
+   `findHeadings()` (every `h2`/`h3` in the article, unfiltered — used by
+   the user-assigned breakpoints panel; see below for why "unfiltered" is
+   fine here unlike the earlier auto-suggested version).
 
 2. **`src/content/progress-bar.js`** → `window.Breakpoint.ui`
-   All visible UI (progress bar, %/time pill with a reading-timer readout,
-   the resume toast) renders inside a single Shadow DOM root so nothing
-   leaks into or is affected by the host page's CSS. Exposes an imperative
-   API (`updateProgress`, `updateTimer`, `showResumeToast`) — it holds no
-   business logic itself.
+   All visible UI (progress bar, %/time pill with a reading-timer readout
+   and a breakpoints-panel toggle, the resume toast) renders inside a
+   single Shadow DOM root so nothing leaks into or is affected by the host
+   page's CSS. Exposes an imperative API (`updateProgress`, `updateTimer`,
+   `renderHeadings`, `showResumeToast`) — it holds no business logic itself.
 
 3. **`src/content/content.js`**
    Orchestrates everything: scroll tracking, storage reads/writes, and
@@ -66,13 +69,33 @@ object — there's no module system or bundler, so load order matters:
    points, shown as a toast, then a bar ruler, then bar tick markers) was
    built and then fully removed after user testing across several
    iterations found every visible form of it either disruptive or
-   unnecessary. Don't reintroduce any of it — toast, ruler, or markers —
-   without being explicitly asked. The reason that trigger failed wasn't
-   "toasts are bad" — it fired on every heading crossed, i.e. constantly.
-   The break-nudge toast below is a deliberately different trigger (rare,
-   time-based) and the user explicitly asked for it as a toast; the lesson
-   to carry forward is about trigger frequency, not the toast component
-   itself.
+   unnecessary. Don't reintroduce that specific shape — an *always-visible,
+   extension-decided* set of pause points — without being explicitly asked.
+   The reason that one failed wasn't "headings are a bad basis for
+   breakpoints" — it was that the extension auto-picked and constantly
+   surfaced *every* heading with no user choice involved. The break-nudge
+   toast below is a deliberately different trigger (rare, time-based) and
+   the user explicitly asked for it as a toast. The user-assigned
+   breakpoints panel (also below) deliberately revives headings as the
+   basis, but inverted: it's opt-in (closed by default, the user opens it),
+   and the user picks which headings matter, rather than the extension
+   deciding for them. The throughline lesson is about *who decides and how
+   often it's shown*, not about avoiding toasts or headings altogether.
+
+   **User-assigned breakpoints panel**: a list button in the pill
+   (`.pill-headings-toggle`) opens `.headings-panel`, listing every heading
+   from `findHeadings()` via `computeHeadings()` (recomputed on every
+   `detectAndMeasure()`, so it stays current through SPA hydration). Each
+   row has two independent controls, deliberately not one dual-purpose tap:
+   clicking the label always jumps there (`jumpToHeading()`, preferring the
+   live element's current position over its last-computed percent, since
+   the page may have reflowed since detection); a separate bookmark icon
+   toggles whether that heading is saved (`toggleMarkHeading()`). Marking is
+   keyed by the heading's **text label**, not a stored scroll position or
+   DOM reference — simple, and good enough across visits: if the site's
+   headings haven't changed, the same labels reappear already marked.
+   Persisted per article to `bpMarks:<origin+pathname>` (an array of
+   labels), loaded in `enterPage()` via `loadMarkedHeadings()`.
 
    The widget is deliberately hidden on a site's own homepage/listing page
    (`isHomePage()`: pathname is `/` or an equivalent `index.html`/
@@ -171,6 +194,9 @@ control genuinely needs it again.)
 - `bp:<origin+pathname>` — per-article auto-saved resume position
   (`{ url, title, percent, scrollY, updatedAt }`); pruned periodically
   (>90 days old or beyond ~300 entries).
+- `bpMarks:<origin+pathname>` — per-article array of heading labels the user
+  marked in the breakpoints panel. Not pruned (small, bounded by however
+  many headings one article has).
 
 Storage keys intentionally strip query string/hash from the URL, so
 paginated articles that vary only by `?page=` will collide — a known,

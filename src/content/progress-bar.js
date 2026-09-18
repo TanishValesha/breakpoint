@@ -32,6 +32,51 @@
     }
     .pill-timer.paused { opacity: 0.5; }
 
+    .pill-headings-toggle {
+      all: unset; cursor: pointer; display: flex; align-items: center;
+      opacity: 0.85; padding: 2px; border-radius: 4px;
+      border-left: 1px solid rgba(255,255,255,0.3); padding-left: 8px;
+    }
+    .pill-headings-toggle:hover { opacity: 1; }
+    .pill-headings-toggle:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+
+    .headings-panel {
+      position: fixed; top: 44px; right: 16px; z-index: 2147483647;
+      background: linear-gradient(160deg, #2563eb, #3b82f6);
+      color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,0.25);
+      border-radius: 10px;
+      width: 240px; max-height: 260px; overflow-y: auto;
+      padding: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+      display: none;
+    }
+    .headings-panel.open { display: block; }
+
+    .heading-row {
+      display: flex; align-items: center; gap: 6px;
+      padding: 2px; border-radius: 6px;
+    }
+    .heading-row:hover { background: rgba(255,255,255,0.15); }
+
+    .heading-label-btn {
+      all: unset; cursor: pointer; flex: 1; min-width: 0;
+      font-size: 12px; font-weight: 500; padding: 6px 4px; border-radius: 6px;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .heading-label-btn:hover { text-decoration: underline; }
+    .heading-label-btn:focus-visible { outline: 2px solid #fff; outline-offset: -2px; }
+
+    .heading-mark-btn {
+      all: unset; cursor: pointer; display: flex; padding: 4px;
+      border-radius: 4px; opacity: 0.7; flex-shrink: 0;
+    }
+    .heading-mark-btn:hover { opacity: 1; }
+    .heading-mark-btn.marked { opacity: 1; color: #fff; }
+    .heading-mark-btn:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+
+    .headings-empty {
+      font-size: 12px; opacity: 0.6; padding: 10px 6px; text-align: center;
+    }
+
     .toast-stack {
       position: fixed; bottom: 20px; right: 16px; z-index: 2147483647;
       display: flex; flex-direction: column; gap: 8px; align-items: flex-end;
@@ -78,6 +123,9 @@
 
   const CLOSE_ICON = `<svg width="10" height="10" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M1 1L9 9M9 1L1 9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>`;
   const CLOCK_ICON = `<svg width="11" height="11" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><circle cx="6" cy="6" r="5" stroke="currentColor" stroke-width="1.2"/><path d="M6 3.2V6l2 1.2" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+  const LIST_ICON = `<svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M2 3H10M2 6H10M2 9H10" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>`;
+  const BOOKMARK_OUTLINE = `<svg width="10" height="12" viewBox="0 0 10 12" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M1.5 1.5H8.5V10.5L5 8L1.5 10.5V1.5Z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>`;
+  const BOOKMARK_FILLED = `<svg width="10" height="12" viewBox="0 0 10 12" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M1.5 1.5H8.5V10.5L5 8L1.5 10.5V1.5Z"/></svg>`;
 
   let root = null;
   let els = {};
@@ -95,7 +143,9 @@
       <div class="pill">
         <span class="pill-text">0% · -- min left</span>
         <span class="pill-timer" title="Time spent on this article — see the popup for your all-time total">${CLOCK_ICON}<span class="pill-timer-text">0:00</span></span>
+        <button class="pill-headings-toggle" aria-expanded="false" aria-label="Section breakpoints" title="Section breakpoints">${LIST_ICON}</button>
       </div>
+      <div class="headings-panel"></div>
       <div class="toast-stack"></div>
     `;
 
@@ -103,12 +153,57 @@
     els.pillText = root.querySelector(".pill-text");
     els.pillTimer = root.querySelector(".pill-timer");
     els.pillTimerText = root.querySelector(".pill-timer-text");
+    els.headingsToggle = root.querySelector(".pill-headings-toggle");
+    els.headingsPanel = root.querySelector(".headings-panel");
     els.toastStack = root.querySelector(".toast-stack");
+
+    els.headingsToggle.addEventListener("click", () => {
+      const open = els.headingsPanel.classList.toggle("open");
+      els.headingsToggle.setAttribute("aria-expanded", String(open));
+    });
   }
 
   function setVisible(visible) {
     if (!root) return;
     root.host.style.display = visible ? "" : "none";
+  }
+
+  // headings: [{ label, percent }]; markedLabels: Set of labels already
+  // saved as breakpoints. Clicking a row's text jumps there; the separate
+  // bookmark icon toggles whether it's saved — two independent actions so
+  // neither is hidden behind ambiguous double-tap behavior.
+  function renderHeadings(headings, markedLabels, onJump, onToggleMark) {
+    if (!root) return;
+    els.headingsPanel.innerHTML = "";
+    if (!headings || headings.length === 0) {
+      els.headingsPanel.innerHTML = `<div class="headings-empty">No sections detected</div>`;
+      return;
+    }
+    headings.forEach((heading) => {
+      const marked = markedLabels.has(heading.label);
+      const row = document.createElement("div");
+      row.className = "heading-row";
+
+      const labelBtn = document.createElement("button");
+      labelBtn.className = "heading-label-btn";
+      labelBtn.textContent = heading.label;
+      labelBtn.title = heading.label;
+      labelBtn.addEventListener("click", () => onJump(heading));
+      row.appendChild(labelBtn);
+
+      const markBtn = document.createElement("button");
+      markBtn.className = marked ? "heading-mark-btn marked" : "heading-mark-btn";
+      markBtn.innerHTML = marked ? BOOKMARK_FILLED : BOOKMARK_OUTLINE;
+      markBtn.setAttribute("aria-pressed", String(marked));
+      markBtn.setAttribute(
+        "aria-label",
+        marked ? `Remove breakpoint at ${heading.label}` : `Save breakpoint at ${heading.label}`
+      );
+      markBtn.addEventListener("click", () => onToggleMark(heading));
+      row.appendChild(markBtn);
+
+      els.headingsPanel.appendChild(row);
+    });
   }
 
   function updateProgress(percent, minutesRemaining) {
@@ -196,6 +291,7 @@
     setVisible,
     updateProgress,
     updateTimer,
+    renderHeadings,
     showResumeToast,
     showBreakNudgeToast,
   };

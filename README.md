@@ -23,6 +23,9 @@ time remaining, so you know when a good moment to take a break is.
   (once you pause scrolling, so it never interrupts mid-read) — pick the
   interval from six presets (5/10/15/20/25/30 min) in the popup.
 - Auto-saved scroll position with a "Resume reading?" prompt on revisit.
+- Breakpoints panel: open the list icon in the pill to see every section
+  heading in the article — tap a heading to jump to it, or tap its
+  bookmark icon to save it as one of your own breakpoints for next time.
 - Reading queue: add the current page from the popup, open or remove later.
 
 All data is stored locally via `chrome.storage.local` — no accounts, no sync.

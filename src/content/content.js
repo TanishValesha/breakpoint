@@ -7,7 +7,7 @@
   const DEFAULT_NUDGE_THRESHOLD_MS = 15 * 60 * 1000;
   const SCROLL_IDLE_MS = 2500;
 
-  const { findArticleElement, getWordCount } = window.Breakpoint.detect;
+  const { findArticleElement, getWordCount, findHeadings } = window.Breakpoint.detect;
   const ui = window.Breakpoint.ui;
 
   function pageKey() {
@@ -15,6 +15,9 @@
   }
   function resumeStorageKey() {
     return "bp:" + pageKey();
+  }
+  function markedHeadingsStorageKey() {
+    return "bpMarks:" + pageKey();
   }
 
   // Skip the site's own homepage/index — there's no article to track there,
@@ -57,6 +60,13 @@
     // article view — lets the reminder repeat every `nudgeThresholdMs`
     // instead of firing only once.
     nudgeIntervalsFired: 0,
+    // Live section headings for the user-assigned breakpoints panel:
+    // [{ element, label, percent }], recomputed on every detectAndMeasure().
+    headings: [],
+    // Labels the user has marked as their own breakpoints for this article,
+    // persisted to storage. A Set of labels (not scroll positions) — see
+    // toggleMarkHeading() for why matching by label is enough for this.
+    markedHeadingLabels: new Set(),
   };
 
   function storageGet(keys) {
@@ -85,11 +95,66 @@
     state.articleEl = findArticleElement();
     refreshBounds();
     state.wordCount = getWordCount(state.articleEl);
+    computeHeadings();
     console.debug("[Breakpoint] detected article:", state.articleEl, {
       height: state.articleEl.offsetHeight,
       scrollableDistance: state.scrollableDistance,
       wordCount: state.wordCount,
+      headings: state.headings.length,
     });
+  }
+
+  // Recomputes the live heading list (position + label) for the
+  // breakpoints panel. Cheap enough to run on every detectAndMeasure() —
+  // just a DOM query and a map, same cadence as word count.
+  function computeHeadings() {
+    state.headings = findHeadings(state.articleEl).map((h) => {
+      const rect = h.element.getBoundingClientRect();
+      const top = rect.top + window.scrollY;
+      const percent = Math.min(
+        Math.max(((top - state.articleTop) / state.scrollableDistance) * 100, 0),
+        100
+      );
+      return { element: h.element, label: h.label, percent };
+    });
+    renderHeadingsPanel();
+  }
+
+  function renderHeadingsPanel() {
+    ui.renderHeadings(state.headings, state.markedHeadingLabels, jumpToHeading, toggleMarkHeading);
+  }
+
+  // Prefers the live element's current position (accurate even if the page
+  // reflowed since detection); falls back to the last-known percent if that
+  // element somehow isn't in the document anymore.
+  function jumpToHeading(heading) {
+    if (heading.element && heading.element.isConnected) {
+      const rect = heading.element.getBoundingClientRect();
+      window.scrollTo({ top: rect.top + window.scrollY, behavior: "smooth" });
+      return;
+    }
+    const target = state.articleTop + (heading.percent / 100) * state.scrollableDistance;
+    window.scrollTo({ top: target, behavior: "smooth" });
+  }
+
+  // Marking is keyed by the heading's text, not a stored scroll position —
+  // simple, and robust enough across visits: if the article's headings
+  // haven't changed, the same labels reappear and show as already marked.
+  function toggleMarkHeading(heading) {
+    if (state.markedHeadingLabels.has(heading.label)) {
+      state.markedHeadingLabels.delete(heading.label);
+    } else {
+      state.markedHeadingLabels.add(heading.label);
+    }
+    storageSet({ [markedHeadingsStorageKey()]: Array.from(state.markedHeadingLabels) });
+    renderHeadingsPanel();
+  }
+
+  async function loadMarkedHeadings() {
+    const key = markedHeadingsStorageKey();
+    const data = await storageGet(key);
+    state.markedHeadingLabels = new Set(data[key] || []);
+    renderHeadingsPanel();
   }
 
   // Sites like Medium hydrate/lazy-render article content client-side, so the
@@ -330,6 +395,7 @@
       }, delay)
     );
     checkResumeOnLoad();
+    loadMarkedHeadings();
     // The session timer (shown in the pill) resets per article view; the
     // global lifetime total lives only in storage and is untouched here.
     // Pause is a deliberate global setting, so it intentionally carries

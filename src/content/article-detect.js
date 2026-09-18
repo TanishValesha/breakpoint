@@ -101,5 +101,15 @@
     return text.split(/\s+/).length;
   }
 
-  window.Breakpoint.detect = { findArticleElement, getWordCount };
+  // Section headings within the article, for the user-assigned breakpoints
+  // panel — every heading is listed, unfiltered; the panel is opt-in (the
+  // user opens it and picks), unlike the earlier auto-suggested breakpoints
+  // that tried to filter/dedupe headings for an always-visible display.
+  function findHeadings(el) {
+    return Array.from(el.querySelectorAll("h2, h3"))
+      .map((heading) => ({ element: heading, label: (heading.innerText || "").trim() }))
+      .filter((h) => h.label.length > 0);
+  }
+
+  window.Breakpoint.detect = { findArticleElement, getWordCount, findHeadings };
 })();
