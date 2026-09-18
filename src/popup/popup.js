@@ -9,16 +9,68 @@ function storageSet(items) {
 }
 
 const enabledToggle = document.getElementById("enabled-toggle");
+const timerEnabledToggle = document.getElementById("timer-enabled-toggle");
+const timerReadout = document.getElementById("timer-readout");
+const timerPauseResumeBtn = document.getElementById("timer-pause-resume");
+const timerResetBtn = document.getElementById("timer-reset");
 const addCurrentBtn = document.getElementById("add-current");
 const queueListEl = document.getElementById("queue-list");
 
 async function loadSettings() {
-  const data = await storageGet("breakpoint:enabled");
+  const data = await storageGet(["breakpoint:enabled", "breakpoint:timerEnabled"]);
   enabledToggle.checked = data["breakpoint:enabled"] !== false;
+  timerEnabledToggle.checked = data["breakpoint:timerEnabled"] !== false;
 }
 
 enabledToggle.addEventListener("change", () => {
   storageSet({ "breakpoint:enabled": enabledToggle.checked });
+});
+
+timerEnabledToggle.addEventListener("change", () => {
+  storageSet({ "breakpoint:timerEnabled": timerEnabledToggle.checked });
+});
+
+function formatElapsed(ms) {
+  const totalSeconds = Math.floor(ms / 1000);
+  const mm = Math.floor(totalSeconds / 60);
+  const ss = totalSeconds % 60;
+  return `${mm}:${String(ss).padStart(2, "0")}`;
+}
+
+async function sendTimerMessage(type) {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!tab || !tab.id) return null;
+  try {
+    return await chrome.tabs.sendMessage(tab.id, { type });
+  } catch {
+    return null;
+  }
+}
+
+async function refreshTimerUI() {
+  const state = await sendTimerMessage("timer:getState");
+  if (!state || !state.onArticlePage) {
+    timerReadout.textContent = "—";
+    timerPauseResumeBtn.disabled = true;
+    timerResetBtn.disabled = true;
+    timerPauseResumeBtn.textContent = "Pause";
+    return;
+  }
+  timerReadout.textContent = formatElapsed(state.elapsedMs);
+  timerPauseResumeBtn.disabled = false;
+  timerResetBtn.disabled = false;
+  timerPauseResumeBtn.textContent = state.manuallyPaused ? "Resume" : "Pause";
+}
+
+timerPauseResumeBtn.addEventListener("click", async () => {
+  const resuming = timerPauseResumeBtn.textContent === "Resume";
+  await sendTimerMessage(resuming ? "timer:resume" : "timer:pause");
+  refreshTimerUI();
+});
+
+timerResetBtn.addEventListener("click", async () => {
+  await sendTimerMessage("timer:reset");
+  refreshTimerUI();
 });
 
 async function loadQueue() {
@@ -69,3 +121,4 @@ addCurrentBtn.addEventListener("click", async () => {
 
 loadSettings();
 renderQueue();
+refreshTimerUI();

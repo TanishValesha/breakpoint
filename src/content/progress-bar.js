@@ -21,24 +21,30 @@
 
     .pill {
       position: fixed; top: 10px; right: 16px; z-index: 2147483647;
-      background: #1f2937; color: #fff; font-size: 12px; font-weight: 500;
-      line-height: 1.4; letter-spacing: 0.01em;
+      background: linear-gradient(90deg, #2563eb, #3b82f6); color: #fff; font-size: 12px; font-weight: 500;
+      line-height: 1.4; letter-spacing: 0.01em; text-shadow: 0 1px 2px rgba(0,0,0,0.25);
       border-radius: 999px; padding: 6px 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.25);
-      opacity: 0.92;
+      opacity: 0.92; display: flex; align-items: center; gap: 8px;
     }
+    .pill-timer {
+      display: flex; align-items: center; gap: 3px; opacity: 0.85;
+      border-left: 1px solid rgba(255,255,255,0.3); padding-left: 8px;
+    }
+    .pill-timer.paused { opacity: 0.5; }
 
     .toast-stack {
       position: fixed; bottom: 20px; right: 16px; z-index: 2147483647;
       display: flex; flex-direction: column; gap: 8px; align-items: flex-end;
     }
     .toast {
-      background: #1f2937; color: #fff; font-size: 13px; border-radius: 10px;
+      background: #1f2937; color: #fff; font-size: 13px;text-shadow: 0 1px 2px rgba(0,0,0,0.25);
+      border-radius: 10px;
       padding: 10px 12px; display: flex; align-items: center; gap: 10px;
       box-shadow: 0 2px 8px rgba(0,0,0,0.25); max-width: 280px;
       animation: bp-toast-in 160ms ease-out;
     }
     .toast button.primary {
-      all: unset; cursor: pointer; background: #2563eb; padding: 5px 10px;
+      all: unset; cursor: pointer; background: linear-gradient(90deg, #2563eb, #3b82f6); padding: 5px 10px;
       border-radius: 6px; font-size: 12px; white-space: nowrap;
       transition: background 100ms ease-out;
     }
@@ -62,6 +68,7 @@
   `;
 
   const CLOSE_ICON = `<svg width="10" height="10" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M1 1L9 9M9 1L1 9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>`;
+  const CLOCK_ICON = `<svg width="11" height="11" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><circle cx="6" cy="6" r="5" stroke="currentColor" stroke-width="1.2"/><path d="M6 3.2V6l2 1.2" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 
   let root = null;
   let els = {};
@@ -76,12 +83,17 @@
     root.innerHTML = `
       <style>${STYLES}</style>
       <div class="bar-track"><div class="bar-fill"></div></div>
-      <div class="pill"><span class="pill-text">0% · -- min left</span></div>
+      <div class="pill">
+        <span class="pill-text">0% · -- min left</span>
+        <span class="pill-timer">${CLOCK_ICON}<span class="pill-timer-text">0:00</span></span>
+      </div>
       <div class="toast-stack"></div>
     `;
 
     els.fill = root.querySelector(".bar-fill");
     els.pillText = root.querySelector(".pill-text");
+    els.pillTimer = root.querySelector(".pill-timer");
+    els.pillTimerText = root.querySelector(".pill-timer-text");
     els.toastStack = root.querySelector(".toast-stack");
   }
 
@@ -101,6 +113,15 @@
         ? " · <1 min left"
         : ` · ${Math.round(minutesRemaining)} min left`;
     els.pillText.textContent = `${pct}%${timeLabel}`;
+  }
+
+  function updateTimer(elapsedMs, running) {
+    if (!root) return;
+    const totalSeconds = Math.floor(elapsedMs / 1000);
+    const mm = Math.floor(totalSeconds / 60);
+    const ss = totalSeconds % 60;
+    els.pillTimerText.textContent = `${mm}:${String(ss).padStart(2, "0")}`;
+    els.pillTimer.classList.toggle("paused", !running);
   }
 
   function makeToast(message, { primaryLabel, onPrimary, onDismiss, autoHideMs } = {}) {
@@ -154,6 +175,7 @@
     init,
     setVisible,
     updateProgress,
+    updateTimer,
     showResumeToast,
   };
 })();

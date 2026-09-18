@@ -33,6 +33,10 @@
     tickScheduled: false,
     pendingSave: null,
     growthTimer: null,
+    timerEnabled: true,
+    timerElapsedMs: 0,
+    timerStartedAt: null,
+    timerManuallyPaused: false,
   };
 
   function storageGet(keys) {
@@ -157,8 +161,9 @@
   }
 
   async function loadSettings() {
-    const data = await storageGet("breakpoint:enabled");
+    const data = await storageGet(["breakpoint:enabled", "breakpoint:timerEnabled"]);
     state.enabled = data["breakpoint:enabled"] !== false;
+    state.timerEnabled = data["breakpoint:timerEnabled"] !== false;
   }
 
   function watchSettingsChanges() {
@@ -167,6 +172,79 @@
       if (changes["breakpoint:enabled"]) {
         state.enabled = changes["breakpoint:enabled"].newValue !== false;
         ui.setVisible(state.enabled && state.onArticlePage);
+        refreshTimerRunState();
+      }
+      if (changes["breakpoint:timerEnabled"]) {
+        state.timerEnabled = changes["breakpoint:timerEnabled"].newValue !== false;
+        refreshTimerRunState();
+      }
+    });
+  }
+
+  // The reading timer only counts time that's actually "active": the tab
+  // visible, the extension on, the timer feature on, on an article page, and
+  // not manually paused from the popup. This recomputes whether it should be
+  // running right now and starts/stops the accumulator accordingly.
+  function shouldTimerRun() {
+    return (
+      state.enabled &&
+      state.timerEnabled &&
+      state.onArticlePage &&
+      !state.timerManuallyPaused &&
+      document.visibilityState === "visible"
+    );
+  }
+
+  function refreshTimerRunState() {
+    const shouldRun = shouldTimerRun();
+    if (shouldRun && !state.timerStartedAt) {
+      state.timerStartedAt = Date.now();
+    } else if (!shouldRun && state.timerStartedAt) {
+      state.timerElapsedMs += Date.now() - state.timerStartedAt;
+      state.timerStartedAt = null;
+    }
+  }
+
+  function getCurrentTimerElapsedMs() {
+    if (!state.timerStartedAt) return state.timerElapsedMs;
+    return state.timerElapsedMs + (Date.now() - state.timerStartedAt);
+  }
+
+  function resetTimer() {
+    state.timerElapsedMs = 0;
+    state.timerStartedAt = null;
+    refreshTimerRunState();
+  }
+
+  function watchTimerMessages() {
+    chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+      if (!message || typeof message.type !== "string" || !message.type.startsWith("timer:")) {
+        return;
+      }
+      if (message.type === "timer:getState") {
+        sendResponse({
+          onArticlePage: state.onArticlePage,
+          elapsedMs: getCurrentTimerElapsedMs(),
+          running: !!state.timerStartedAt,
+          manuallyPaused: state.timerManuallyPaused,
+        });
+        return;
+      }
+      if (message.type === "timer:pause") {
+        state.timerManuallyPaused = true;
+        refreshTimerRunState();
+        sendResponse({ ok: true });
+        return;
+      }
+      if (message.type === "timer:resume") {
+        state.timerManuallyPaused = false;
+        refreshTimerRunState();
+        sendResponse({ ok: true });
+        return;
+      }
+      if (message.type === "timer:reset") {
+        resetTimer();
+        sendResponse({ ok: true });
       }
     });
   }
@@ -178,6 +256,7 @@
     if (isHomePage()) {
       state.onArticlePage = false;
       ui.setVisible(false);
+      refreshTimerRunState();
       return;
     }
     state.onArticlePage = true;
@@ -192,6 +271,9 @@
       }, delay)
     );
     checkResumeOnLoad();
+    // Each article view is its own reading session for the timer.
+    state.timerManuallyPaused = false;
+    resetTimer();
   }
 
   // Client-side (pushState/replaceState) navigation doesn't fire any event a
@@ -214,6 +296,11 @@
     watchSettingsChanges();
     watchForContentGrowth();
     watchForUrlChanges();
+    watchTimerMessages();
+    setInterval(() => {
+      if (!state.onArticlePage) return;
+      ui.updateTimer(getCurrentTimerElapsedMs(), !!state.timerStartedAt);
+    }, 1000);
 
     enterPage();
 
@@ -225,6 +312,7 @@
     });
     document.addEventListener("visibilitychange", () => {
       if (document.visibilityState === "hidden") flushSave();
+      refreshTimerRunState();
     });
     window.addEventListener("pagehide", flushSave);
   }

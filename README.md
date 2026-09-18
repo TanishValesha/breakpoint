@@ -15,6 +15,8 @@ time remaining, so you know when a good moment to take a break is.
 
 - Live reading-progress bar against the detected article content.
 - Estimated time remaining (word count ÷ ~200 WPM).
+- Reading timer: tracks active time spent on the current article (shown in
+  the pill), with pause/resume/reset controls in the popup.
 - Auto-saved scroll position with a "Resume reading?" prompt on revisit.
 - Reading queue: add the current page from the popup, open or remove later.
 

@@ -43,10 +43,11 @@ object — there's no module system or bundler, so load order matters:
    `document.body` as a last-resort fallback. Also exposes word counting.
 
 2. **`src/content/progress-bar.js`** → `window.Breakpoint.ui`
-   All visible UI (progress bar, %/time pill, the resume toast) renders
-   inside a single Shadow DOM root so nothing leaks into or is affected by
-   the host page's CSS. Exposes an imperative API (`updateProgress`,
-   `showResumeToast`) — it holds no business logic itself.
+   All visible UI (progress bar, %/time pill with a reading-timer readout,
+   the resume toast) renders inside a single Shadow DOM root so nothing
+   leaks into or is affected by the host page's CSS. Exposes an imperative
+   API (`updateProgress`, `updateTimer`, `showResumeToast`) — it holds no
+   business logic itself.
 
 3. **`src/content/content.js`**
    Orchestrates everything: scroll tracking, storage reads/writes, and
@@ -82,10 +83,25 @@ object — there's no module system or bundler, so load order matters:
    `onScroll`/resize/the growth-observer so they're inert while sitting on a
    non-article page between navigations.
 
+   **Reading timer**: tracks accumulated *active* reading time for the
+   current article view — `shouldTimerRun()` requires the tab visible, the
+   extension and timer both enabled, on an article page, and not manually
+   paused, and `refreshTimerRunState()` starts/stops the accumulator
+   whenever any of those inputs change (settings change, `visibilitychange`,
+   navigation). It resets to zero on every `enterPage()` — each article view
+   is its own session, nothing is persisted to storage. A `setInterval`
+   ticks `ui.updateTimer()` every second while on an article page.
+
 `src/popup/` (popup.html/js/css) is a separate, independent UI: the on/off
-toggle and reading queue. It talks to `chrome.storage.local` directly and to
-the active tab via the `activeTab` permission — it does not communicate with
-the content scripts directly, only through shared storage.
+toggle, the reading queue, and the timer's pause/resume/reset controls. It
+talks to `chrome.storage.local` directly for settings/queue, but the timer
+controls need to act on *this specific tab's* live, in-memory state, which
+storage can't scope to one tab — so the popup instead messages the active
+tab's content script directly via `chrome.tabs.sendMessage`/
+`chrome.runtime.onMessage` (`timer:getState` / `timer:pause` / `timer:resume`
+/ `timer:reset`), the first and only place this codebase does popup↔content-
+script messaging rather than going through shared storage. No extra
+manifest permission was needed — `activeTab` already covers it.
 
 ### Storage keys (all in `chrome.storage.local`)
 
