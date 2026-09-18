@@ -19,6 +19,9 @@
   function markedHeadingsStorageKey() {
     return "bpMarks:" + pageKey();
   }
+  function reachedBreakpointsStorageKey() {
+    return "bpReached:" + pageKey();
+  }
 
   // Skip the site's own homepage/index — there's no article to track there,
   // and the widget would just be clutter on a listing page.
@@ -67,8 +70,11 @@
     // persisted to storage. A Set of labels (not scroll positions) — see
     // toggleMarkHeading() for why matching by label is enough for this.
     markedHeadingLabels: new Set(),
-    // Marked-heading labels already celebrated this article view, so
-    // scrolling back and forth across one doesn't repeat the celebration.
+    // Marked-heading labels already celebrated — persisted per article
+    // (loadReachedBreakpoints/checkReachedBreakpoints), so resuming past
+    // several already-passed breakpoints in one jump (e.g. clicking
+    // "Resume" after a reload) doesn't re-fire all of them at once. Not
+    // just an in-memory guard against scrolling back and forth like before.
     reachedBreakpointLabels: new Set(),
   };
 
@@ -146,6 +152,14 @@
   function toggleMarkHeading(heading) {
     if (state.markedHeadingLabels.has(heading.label)) {
       state.markedHeadingLabels.delete(heading.label);
+      // Unmarking retires its "reached" record too — if the user re-marks
+      // the same heading later, treat it as a fresh breakpoint rather than
+      // one that's silently already celebrated.
+      if (state.reachedBreakpointLabels.delete(heading.label)) {
+        storageSet({
+          [reachedBreakpointsStorageKey()]: Array.from(state.reachedBreakpointLabels),
+        });
+      }
     } else {
       state.markedHeadingLabels.add(heading.label);
     }
@@ -160,22 +174,38 @@
     renderHeadingsPanel();
   }
 
+  async function loadReachedBreakpoints() {
+    const key = reachedBreakpointsStorageKey();
+    const data = await storageGet(key);
+    state.reachedBreakpointLabels = new Set(data[key] || []);
+  }
+
   // Celebrates reaching a breakpoint the user themself marked — unlike the
   // earlier auto-suggested heading nudge this replaced, it only ever fires
   // for headings the reader explicitly opted into, so it doesn't need the
   // break-nudge's scroll-idle wait: reaching a spot you deliberately chose
-  // is a discrete, wanted moment, not an interruption to soften.
+  // is a discrete, wanted moment, not an interruption to soften. Reached
+  // labels are persisted (not just tracked in memory) so resuming past
+  // several of them at once — e.g. reloading and clicking "Resume" — only
+  // ever fires for genuinely new ones, never replaying past celebrations.
   function checkReachedBreakpoints(progress) {
     if (state.markedHeadingLabels.size === 0) return;
     const progressPct = progress * 100;
+    let newlyReached = false;
     state.headings.forEach((heading) => {
       if (!state.markedHeadingLabels.has(heading.label)) return;
       if (state.reachedBreakpointLabels.has(heading.label)) return;
       if (progressPct < heading.percent) return;
       state.reachedBreakpointLabels.add(heading.label);
+      newlyReached = true;
       ui.spawnConfetti();
       ui.showBreakpointReachedToast();
     });
+    if (newlyReached) {
+      storageSet({
+        [reachedBreakpointsStorageKey()]: Array.from(state.reachedBreakpointLabels),
+      });
+    }
   }
 
   // Sites like Medium hydrate/lazy-render article content client-side, so the
@@ -418,12 +448,15 @@
     );
     checkResumeOnLoad();
     loadMarkedHeadings();
+    // Loads which marked breakpoints this article has already celebrated
+    // (persisted, not reset per view) — otherwise resuming past several of
+    // them at once would re-fire every one of them on every reload.
+    loadReachedBreakpoints();
     // The session timer (shown in the pill) resets per article view; the
     // global lifetime total lives only in storage and is untouched here.
     // Pause is a deliberate global setting, so it intentionally carries
     // over across article navigation instead of auto-clearing.
     state.nudgeIntervalsFired = 0;
-    state.reachedBreakpointLabels = new Set();
     state.sessionElapsedMs = 0;
     state.lastScrollAt = Date.now();
     // Actually starts the clock now that we're on an article page — without

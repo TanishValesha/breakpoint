@@ -107,8 +107,14 @@ object — there's no module system or bundler, so load order matters:
    rather than run and hidden) plus `ui.showBreakpointReachedToast()`.
    Unlike the break-nudge, this doesn't wait for scroll-idle: reaching a
    spot the reader deliberately chose is a discrete, wanted moment, not an
-   interruption to soften. `state.reachedBreakpointLabels` (reset per
-   `enterPage()`) stops it firing again if they scroll back over it.
+   interruption to soften. `state.reachedBreakpointLabels` is **persisted**
+   per article (`bpReached:<origin+pathname>`, loaded in `enterPage()` via
+   `loadReachedBreakpoints()`) rather than just an in-memory guard — it has
+   to survive a reload, otherwise resuming past several already-celebrated
+   breakpoints in one jump (e.g. reloading, then clicking "Resume" on the
+   toast) re-fires every one of them at once. Unmarking a heading in
+   `toggleMarkHeading()` also clears its reached record, so re-marking the
+   same heading later is treated as a fresh breakpoint.
 
    The widget is deliberately hidden on a site's own homepage/listing page
    (`isHomePage()`: pathname is `/` or an equivalent `index.html`/
@@ -210,6 +216,9 @@ control genuinely needs it again.)
 - `bpMarks:<origin+pathname>` — per-article array of heading labels the user
   marked in the breakpoints panel. Not pruned (small, bounded by however
   many headings one article has).
+- `bpReached:<origin+pathname>` — per-article array of marked-heading labels
+  already celebrated, so the confetti/toast never replays on a later visit
+  or resume. Not pruned, same reasoning as `bpMarks`.
 
 Storage keys intentionally strip query string/hash from the URL, so
 paginated articles that vary only by `?page=` will collide — a known,
