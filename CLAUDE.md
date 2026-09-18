@@ -67,7 +67,12 @@ object — there's no module system or bundler, so load order matters:
    built and then fully removed after user testing across several
    iterations found every visible form of it either disruptive or
    unnecessary. Don't reintroduce any of it — toast, ruler, or markers —
-   without being explicitly asked.
+   without being explicitly asked. The reason that trigger failed wasn't
+   "toasts are bad" — it fired on every heading crossed, i.e. constantly.
+   The break-nudge toast below is a deliberately different trigger (rare,
+   time-based) and the user explicitly asked for it as a toast; the lesson
+   to carry forward is about trigger frequency, not the toast component
+   itself.
 
    The widget is deliberately hidden on a site's own homepage/listing page
    (`isHomePage()`: pathname is `/` or an equivalent `index.html`/
@@ -92,6 +97,17 @@ object — there's no module system or bundler, so load order matters:
    is its own session, nothing is persisted to storage. A `setInterval`
    ticks `ui.updateTimer()` every second while on an article page.
 
+   **Break-reminder nudge**: `maybeShowBreakNudge()` runs from that same
+   1-second tick and fires `ui.showBreakNudgeToast()` (a toast with a
+   pulsing glow animation, `prefers-reduced-motion`-aware) once per article
+   view, only when *both* the timer has crossed `BREAK_NUDGE_THRESHOLD_MS`
+   (15 min) *and* `state.lastScrollAt` (updated on every scroll event) is
+   more than `SCROLL_IDLE_MS` (2.5s) in the past — i.e. only in a natural
+   pause, not mid-scroll. Gated by its own `breakpoint:nudgeEnabled` setting,
+   independent of the timer's on/off toggle, so the readout can stay on
+   without the nudge. `state.breakNudgeShown` resets in `enterPage()`
+   alongside the timer.
+
 `src/popup/` (popup.html/js/css) is a separate, independent UI: the on/off
 toggle, the reading queue, and the timer's pause/resume/reset controls. It
 talks to `chrome.storage.local` directly for settings/queue, but the timer
@@ -107,6 +123,9 @@ manifest permission was needed — `activeTab` already covers it.
 
 - `breakpoint:enabled` (bool) — global on/off, read by both the popup and
   content script, kept in sync live via `chrome.storage.onChanged`.
+- `breakpoint:timerEnabled` / `breakpoint:nudgeEnabled` (bool) — global,
+  independent on/off switches for the reading-timer readout and the
+  break-reminder toast, respectively.
 - `breakpoint:queue` — global array of `{ url, title, addedAt }`.
 - `bp:<origin+pathname>` — per-article auto-saved resume position
   (`{ url, title, percent, scrollY, updatedAt }`); pruned periodically

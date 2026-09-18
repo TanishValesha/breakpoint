@@ -10,6 +10,7 @@ function storageSet(items) {
 
 const enabledToggle = document.getElementById("enabled-toggle");
 const timerEnabledToggle = document.getElementById("timer-enabled-toggle");
+const nudgeEnabledToggle = document.getElementById("nudge-enabled-toggle");
 const timerReadout = document.getElementById("timer-readout");
 const timerPauseResumeBtn = document.getElementById("timer-pause-resume");
 const timerResetBtn = document.getElementById("timer-reset");
@@ -17,9 +18,14 @@ const addCurrentBtn = document.getElementById("add-current");
 const queueListEl = document.getElementById("queue-list");
 
 async function loadSettings() {
-  const data = await storageGet(["breakpoint:enabled", "breakpoint:timerEnabled"]);
+  const data = await storageGet([
+    "breakpoint:enabled",
+    "breakpoint:timerEnabled",
+    "breakpoint:nudgeEnabled",
+  ]);
   enabledToggle.checked = data["breakpoint:enabled"] !== false;
   timerEnabledToggle.checked = data["breakpoint:timerEnabled"] !== false;
+  nudgeEnabledToggle.checked = data["breakpoint:nudgeEnabled"] !== false;
 }
 
 enabledToggle.addEventListener("change", () => {
@@ -28,6 +34,10 @@ enabledToggle.addEventListener("change", () => {
 
 timerEnabledToggle.addEventListener("change", () => {
   storageSet({ "breakpoint:timerEnabled": timerEnabledToggle.checked });
+});
+
+nudgeEnabledToggle.addEventListener("change", () => {
+  storageSet({ "breakpoint:nudgeEnabled": nudgeEnabledToggle.checked });
 });
 
 function formatElapsed(ms) {

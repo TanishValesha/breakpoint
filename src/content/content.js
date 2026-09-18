@@ -4,6 +4,8 @@
   const SAVE_DEBOUNCE_MS = 500;
   const MAX_RESUME_ENTRIES = 300;
   const MAX_RESUME_AGE_MS = 90 * 24 * 60 * 60 * 1000;
+  const BREAK_NUDGE_THRESHOLD_MS = 15 * 60 * 1000;
+  const SCROLL_IDLE_MS = 2500;
 
   const { findArticleElement, getWordCount } = window.Breakpoint.detect;
   const ui = window.Breakpoint.ui;
@@ -37,6 +39,9 @@
     timerElapsedMs: 0,
     timerStartedAt: null,
     timerManuallyPaused: false,
+    nudgeEnabled: true,
+    lastScrollAt: 0,
+    breakNudgeShown: false,
   };
 
   function storageGet(keys) {
@@ -133,6 +138,7 @@
   }
 
   function onScroll() {
+    state.lastScrollAt = Date.now();
     if (state.tickScheduled) return;
     state.tickScheduled = true;
     requestAnimationFrame(() => {
@@ -161,9 +167,14 @@
   }
 
   async function loadSettings() {
-    const data = await storageGet(["breakpoint:enabled", "breakpoint:timerEnabled"]);
+    const data = await storageGet([
+      "breakpoint:enabled",
+      "breakpoint:timerEnabled",
+      "breakpoint:nudgeEnabled",
+    ]);
     state.enabled = data["breakpoint:enabled"] !== false;
     state.timerEnabled = data["breakpoint:timerEnabled"] !== false;
+    state.nudgeEnabled = data["breakpoint:nudgeEnabled"] !== false;
   }
 
   function watchSettingsChanges() {
@@ -177,6 +188,9 @@
       if (changes["breakpoint:timerEnabled"]) {
         state.timerEnabled = changes["breakpoint:timerEnabled"].newValue !== false;
         refreshTimerRunState();
+      }
+      if (changes["breakpoint:nudgeEnabled"]) {
+        state.nudgeEnabled = changes["breakpoint:nudgeEnabled"].newValue !== false;
       }
     });
   }
@@ -214,6 +228,20 @@
     state.timerElapsedMs = 0;
     state.timerStartedAt = null;
     refreshTimerRunState();
+  }
+
+  // Fires once per article view: only once real reading time has piled up
+  // AND the reader isn't actively mid-scroll, so it lands in a natural lull
+  // rather than interrupting. See CLAUDE.md for why this is a toast this
+  // time despite the earlier heading-crossing nudge being removed — the
+  // trigger here is rare (once, time-based) rather than constant.
+  function maybeShowBreakNudge(elapsedMs) {
+    if (state.breakNudgeShown) return;
+    if (!state.enabled || !state.timerEnabled || !state.nudgeEnabled) return;
+    if (elapsedMs < BREAK_NUDGE_THRESHOLD_MS) return;
+    if (Date.now() - state.lastScrollAt < SCROLL_IDLE_MS) return;
+    state.breakNudgeShown = true;
+    ui.showBreakNudgeToast(Math.round(elapsedMs / 60000));
   }
 
   function watchTimerMessages() {
@@ -271,8 +299,10 @@
       }, delay)
     );
     checkResumeOnLoad();
-    // Each article view is its own reading session for the timer.
+    // Each article view is its own reading session for the timer and nudge.
     state.timerManuallyPaused = false;
+    state.breakNudgeShown = false;
+    state.lastScrollAt = Date.now();
     resetTimer();
   }
 
@@ -299,7 +329,9 @@
     watchTimerMessages();
     setInterval(() => {
       if (!state.onArticlePage) return;
-      ui.updateTimer(getCurrentTimerElapsedMs(), !!state.timerStartedAt);
+      const elapsed = getCurrentTimerElapsedMs();
+      ui.updateTimer(elapsed, !!state.timerStartedAt);
+      maybeShowBreakNudge(elapsed);
     }, 1000);
 
     enterPage();
