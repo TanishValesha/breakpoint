@@ -67,6 +67,9 @@
     // persisted to storage. A Set of labels (not scroll positions) — see
     // toggleMarkHeading() for why matching by label is enough for this.
     markedHeadingLabels: new Set(),
+    // Marked-heading labels already celebrated this article view, so
+    // scrolling back and forth across one doesn't repeat the celebration.
+    reachedBreakpointLabels: new Set(),
   };
 
   function storageGet(keys) {
@@ -157,6 +160,24 @@
     renderHeadingsPanel();
   }
 
+  // Celebrates reaching a breakpoint the user themself marked — unlike the
+  // earlier auto-suggested heading nudge this replaced, it only ever fires
+  // for headings the reader explicitly opted into, so it doesn't need the
+  // break-nudge's scroll-idle wait: reaching a spot you deliberately chose
+  // is a discrete, wanted moment, not an interruption to soften.
+  function checkReachedBreakpoints(progress) {
+    if (state.markedHeadingLabels.size === 0) return;
+    const progressPct = progress * 100;
+    state.headings.forEach((heading) => {
+      if (!state.markedHeadingLabels.has(heading.label)) return;
+      if (state.reachedBreakpointLabels.has(heading.label)) return;
+      if (progressPct < heading.percent) return;
+      state.reachedBreakpointLabels.add(heading.label);
+      ui.spawnConfetti();
+      ui.showBreakpointReachedToast(heading.label);
+    });
+  }
+
   // Sites like Medium hydrate/lazy-render article content client-side, so the
   // element we picked at init can still be growing after our first measurement.
   // Watch for DOM growth and re-detect (debounced) so bounds don't stay stale.
@@ -232,6 +253,7 @@
 
       ui.updateProgress(progress * 100, minutesRemaining);
       scheduleSave(progress, window.scrollY);
+      checkReachedBreakpoints(progress);
     });
   }
 
@@ -401,6 +423,7 @@
     // Pause is a deliberate global setting, so it intentionally carries
     // over across article navigation instead of auto-clearing.
     state.nudgeIntervalsFired = 0;
+    state.reachedBreakpointLabels = new Set();
     state.sessionElapsedMs = 0;
     state.lastScrollAt = Date.now();
     // Actually starts the clock now that we're on an article page — without

@@ -13,7 +13,9 @@ step.
 ## Development workflow
 
 There is no build step, package manager, or test suite — it's plain
-JS/HTML/CSS loaded directly by Chrome.
+JS/HTML/CSS loaded directly by Chrome. The one exception is
+`src/content/vendor/confetti.browser.js`, the `canvas-confetti` library —
+see "Third-party code" below for why it's vendored rather than installed.
 
 - **Load/reload the extension**: `chrome://extensions` → enable "Developer
   mode" → "Load unpacked" → select the project root. After editing files,
@@ -96,6 +98,17 @@ object — there's no module system or bundler, so load order matters:
    headings haven't changed, the same labels reappear already marked.
    Persisted per article to `bpMarks:<origin+pathname>` (an array of
    labels), loaded in `enterPage()` via `loadMarkedHeadings()`.
+
+   **Reaching a marked breakpoint celebrates**: `checkReachedBreakpoints()`
+   runs from the same scroll-driven tick as `updateProgress()` and, the
+   moment scroll progress crosses a *marked* heading's percent, fires
+   `ui.spawnConfetti()` (the `canvas-confetti` "Side Cannons" preset — see
+   "Third-party code" below, `prefers-reduced-motion`-aware, skipped outright
+   rather than run and hidden) plus `ui.showBreakpointReachedToast()`.
+   Unlike the break-nudge, this doesn't wait for scroll-idle: reaching a
+   spot the reader deliberately chose is a discrete, wanted moment, not an
+   interruption to soften. `state.reachedBreakpointLabels` (reset per
+   `enterPage()`) stops it firing again if they scroll back over it.
 
    The widget is deliberately hidden on a site's own homepage/listing page
    (`isHomePage()`: pathname is `/` or an equivalent `index.html`/
@@ -201,6 +214,38 @@ control genuinely needs it again.)
 Storage keys intentionally strip query string/hash from the URL, so
 paginated articles that vary only by `?page=` will collide — a known,
 accepted trade-off for this MVP.
+
+## Third-party code
+
+`src/content/vendor/confetti.browser.js` is `canvas-confetti` (the library
+MagicUI's `Confetti` component wraps), vendored verbatim — this is the
+**only** external dependency in the project; everything else is still
+hand-written. It's a plain file download (`curl`), not an npm
+install/bundle step, because Chrome extensions can't load remotely-hosted
+code at runtime (Manifest V3 policy requires everything ship inside the
+package), so a CDN `<script src>` isn't an option — the file has to be
+committed to the repo and loaded as an ordinary content script. It's listed
+first in `manifest.json`'s `content_scripts.js` array so `window.confetti`
+exists before `progress-bar.js` runs. To update it: re-run the same `curl`
+against the jsdelivr URL for a newer version and re-verify with
+`node --check`.
+
+`progress-bar.js` scopes it to a `<canvas>` element living inside the
+extension's own Shadow DOM root (via `confetti.create(canvas, { resize:
+true })`) rather than letting the library inject its default canvas into
+the host page's `document.body` — keeps it consistent with everything else
+in this codebase rendering inside that one root. `useWorker` is
+deliberately left off: it requires creating a `Worker`/`Blob`, which some
+sites' CSP blocks, and a silently-broken celebration on some sites is worse
+than slightly less optimal main-thread rendering everywhere.
+
+`fireSideCannons()` adapts the library's own "Side Cannons" example: 2
+particles/frame from each side, aimed inward and upward, for 3 seconds.
+Origin is the bottom corners (`y: 1`) rather than the reference's mid-edge
+(`y: 0.5`) — moved on request, since angle 60/120 already aims
+inward-and-up, which reads as a corner cannon once it's actually anchored
+to a corner. Don't restyle the angle/spread/velocity without being asked;
+those are still the preset's own values.
 
 ## Permissions
 

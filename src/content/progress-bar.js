@@ -119,6 +119,11 @@
     @media (prefers-reduced-motion: reduce) {
       .toast, .toast.glow { animation: none; }
     }
+
+    .confetti-canvas {
+      position: fixed; inset: 0; width: 100%; height: 100%;
+      pointer-events: none; z-index: 2147483647;
+    }
   `;
 
   const CLOSE_ICON = `<svg width="10" height="10" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M1 1L9 9M9 1L1 9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>`;
@@ -129,6 +134,7 @@
 
   let root = null;
   let els = {};
+  let confettiInstance = null;
 
   function init() {
     if (root) return;
@@ -146,6 +152,7 @@
         <button class="pill-headings-toggle" aria-expanded="false" aria-label="Section breakpoints" title="Section breakpoints">${LIST_ICON}</button>
       </div>
       <div class="headings-panel"></div>
+      <canvas class="confetti-canvas"></canvas>
       <div class="toast-stack"></div>
     `;
 
@@ -155,12 +162,24 @@
     els.pillTimerText = root.querySelector(".pill-timer-text");
     els.headingsToggle = root.querySelector(".pill-headings-toggle");
     els.headingsPanel = root.querySelector(".headings-panel");
+    els.confettiCanvas = root.querySelector(".confetti-canvas");
     els.toastStack = root.querySelector(".toast-stack");
 
     els.headingsToggle.addEventListener("click", () => {
       const open = els.headingsPanel.classList.toggle("open");
       els.headingsToggle.setAttribute("aria-expanded", String(open));
     });
+
+    // canvas-confetti (vendored in src/content/vendor/, loaded before this
+    // script) defaults to injecting its own canvas into document.body —
+    // scoping it to a canvas we own inside the Shadow DOM instead keeps it
+    // consistent with the rest of the UI living entirely in our own root.
+    // useWorker is left off: it needs Worker/Blob creation, which some
+    // sites' CSP blocks, and a silently-broken celebration is worse than
+    // slightly less optimal main-thread rendering.
+    if (window.confetti && window.confetti.create) {
+      confettiInstance = window.confetti.create(els.confettiCanvas, { resize: true });
+    }
   }
 
   function setVisible(visible) {
@@ -286,6 +305,59 @@
     });
   }
 
+  function showBreakpointReachedToast(label) {
+    makeToast(`Reached "${label}" — nice work! Take a break?`, {
+      autoHideMs: 8000,
+    });
+  }
+
+  // The "Side Cannons" preset from canvas-confetti (also what MagicUI's
+  // Adapted from canvas-confetti's "Side Cannons" preset (also what
+  // MagicUI's Confetti component wraps): two cannons firing for 3 seconds,
+  // 2 particles per frame per side via requestAnimationFrame. Origin moved
+  // from the reference's mid-edge (y: 0.5) to the bottom corners (y: 1) per
+  // request — angle 60/120 already aimed inward-and-upward, so at a bottom
+  // corner that reads as a classic corner cannon shooting up into the
+  // screen. spread 55 and startVelocity 60 are the preset's own values,
+  // left untouched.
+  function fireSideCannons() {
+    if (!confettiInstance) return;
+    const end = Date.now() + 3 * 1000;
+    const colors = ["#a786ff", "#fd8bbc", "#eca184", "#f8deb1"];
+
+    (function frame() {
+      if (Date.now() > end) return;
+      confettiInstance({
+        particleCount: 2,
+        angle: 60,
+        spread: 55,
+        startVelocity: 60,
+        origin: { x: 0, y: 1 },
+        colors: colors,
+      });
+      confettiInstance({
+        particleCount: 2,
+        angle: 120,
+        spread: 55,
+        startVelocity: 60,
+        origin: { x: 1, y: 1 },
+        colors: colors,
+      });
+      requestAnimationFrame(frame);
+    })();
+  }
+
+  // Skipped outright under prefers-reduced-motion, same as the toast
+  // animations — a 3-second cannon burst is exactly the kind of spatial
+  // motion that guidance asks to drop rather than just soften.
+  function spawnConfetti() {
+    if (!root) return;
+    if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      return;
+    }
+    fireSideCannons();
+  }
+
   window.Breakpoint.ui = {
     init,
     setVisible,
@@ -294,5 +366,7 @@
     renderHeadings,
     showResumeToast,
     showBreakNudgeToast,
+    showBreakpointReachedToast,
+    spawnConfetti,
   };
 })();

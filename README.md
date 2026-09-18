@@ -26,6 +26,12 @@ time remaining, so you know when a good moment to take a break is.
 - Breakpoints panel: open the list icon in the pill to see every section
   heading in the article — tap a heading to jump to it, or tap its
   bookmark icon to save it as one of your own breakpoints for next time.
+  Scroll past one you've saved and it celebrates with a confetti cannon
+  from each side of the screen plus a toast suggesting a break.
 - Reading queue: add the current page from the popup, open or remove later.
 
 All data is stored locally via `chrome.storage.local` — no accounts, no sync.
+
+The confetti effect uses [canvas-confetti](https://github.com/catdad/canvas-confetti),
+vendored locally in `src/content/vendor/` — the only external dependency in
+this project.

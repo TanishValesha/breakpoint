@@ -8,6 +8,7 @@
     {
       "matches": ["http://*/*", "https://*/*"],
       "js": [
+        "src/content/vendor/confetti.browser.js",
         "src/content/article-detect.js",
         "src/content/progress-bar.js",
         "src/content/content.js"
