@@ -64,8 +64,31 @@ timerPauseResumeBtn.addEventListener("click", async () => {
   refreshTimerUI();
 });
 
+// window.confirm() renders unreliably inside an extension popup's small,
+// fixed-size viewport — its buttons can end up clipped/unreachable — so
+// this confirms inline instead: first click arms it, second click within
+// a few seconds actually resets, otherwise it quietly reverts.
+let resetArmedTimeout = null;
+
+function armResetConfirm() {
+  timerResetBtn.textContent = "Sure?";
+  timerResetBtn.classList.add("confirm");
+  resetArmedTimeout = setTimeout(disarmResetConfirm, 3000);
+}
+
+function disarmResetConfirm() {
+  clearTimeout(resetArmedTimeout);
+  resetArmedTimeout = null;
+  timerResetBtn.textContent = "Reset";
+  timerResetBtn.classList.remove("confirm");
+}
+
 timerResetBtn.addEventListener("click", async () => {
-  if (!confirm("Reset your lifetime reading timer to 0? This can't be undone.")) return;
+  if (!resetArmedTimeout) {
+    armResetConfirm();
+    return;
+  }
+  disarmResetConfirm();
   await storageSet({ "breakpoint:timerTotalMs": 0 });
   refreshTimerUI();
 });
