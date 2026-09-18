@@ -42,11 +42,10 @@
 
     .headings-panel {
       position: fixed; top: 44px; right: 16px; z-index: 2147483647;
-      background: linear-gradient(160deg, #2563eb, #3b82f6);
-      color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,0.25);
+      background: #fff; color: #1f2937;
       border-radius: 10px;
       width: 240px; max-height: 260px; overflow-y: auto;
-      padding: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+      padding: 6px; box-shadow: 0 4px 16px rgba(0,0,0,0.18);
       display: none;
     }
     .headings-panel.open { display: block; }
@@ -55,31 +54,32 @@
       display: flex; align-items: center; gap: 6px;
       padding: 2px; border-radius: 6px;
     }
-    .heading-row:hover { background: rgba(255,255,255,0.15); }
+    .heading-row:hover { background: rgba(0,0,0,0.05); }
 
     .heading-label-btn {
       all: unset; cursor: pointer; flex: 1; min-width: 0;
-      font-size: 12px; font-weight: 500; padding: 6px 4px; border-radius: 6px;
+      font-size: 12px; font-weight: 700; padding: 6px 4px; border-radius: 6px;
       overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
     .heading-label-btn:hover { text-decoration: underline; }
-    .heading-label-btn:focus-visible { outline: 2px solid #fff; outline-offset: -2px; }
+    .heading-label-btn:focus-visible { outline: 2px solid #2563eb; outline-offset: -2px; }
 
     .heading-mark-btn {
       all: unset; cursor: pointer; display: flex; padding: 4px;
-      border-radius: 4px; opacity: 0.7; flex-shrink: 0;
+      border-radius: 4px; opacity: 0.6; flex-shrink: 0;
     }
     .heading-mark-btn:hover { opacity: 1; }
-    .heading-mark-btn.marked { opacity: 1; color: #fff; }
-    .heading-mark-btn:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+    .heading-mark-btn.marked { opacity: 1; color: #2563eb; }
+    .heading-mark-btn:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
 
     .headings-empty {
-      font-size: 12px; opacity: 0.6; padding: 10px 6px; text-align: center;
+      font-size: 12px; color: #6b7280; padding: 10px 6px; text-align: center;
     }
 
     .toast-stack {
-      position: fixed; bottom: 20px; right: 16px; z-index: 2147483647;
-      display: flex; flex-direction: column; gap: 8px; align-items: flex-end;
+      position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+      z-index: 2147483647;
+      display: flex; flex-direction: column; gap: 8px; align-items: center;
     }
     .toast {
       background: linear-gradient(90deg, #2563eb, #3b82f6); color: #fff; font-size: 13px;
@@ -108,6 +108,15 @@
     .toast.glow {
       animation: bp-toast-in 160ms ease-out, bp-toast-glow 1400ms ease-in-out 200ms 2;
     }
+    .toast.light {
+      background: #fff; color: #1f2937; text-shadow: none;
+      border-radius: 999px; box-shadow: 0 4px 16px rgba(0,0,0,0.18);
+    }
+    .toast.light button.primary:focus-visible,
+    .toast.light button.dismiss:focus-visible {
+      outline-color: #2563eb;
+    }
+    .toast-icon { display: flex; flex-shrink: 0; }
     @keyframes bp-toast-in {
       from { opacity: 0; transform: translateY(6px); }
       to { opacity: 1; transform: translateY(0); }
@@ -131,6 +140,7 @@
   const LIST_ICON = `<svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M2 3H10M2 6H10M2 9H10" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>`;
   const BOOKMARK_OUTLINE = `<svg width="10" height="12" viewBox="0 0 10 12" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M1.5 1.5H8.5V10.5L5 8L1.5 10.5V1.5Z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>`;
   const BOOKMARK_FILLED = `<svg width="10" height="12" viewBox="0 0 10 12" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M1.5 1.5H8.5V10.5L5 8L1.5 10.5V1.5Z"/></svg>`;
+  const TICK_ICON = `<svg width="16" height="16" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><circle cx="7" cy="7" r="6" stroke="#2563eb" stroke-width="1.3"/><path d="M4.3 7.2L6.1 9L9.7 5.2" stroke="#2563eb" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 
   let root = null;
   let els = {};
@@ -251,10 +261,19 @@
     els.pillTimer.classList.toggle("paused", !running);
   }
 
-  function makeToast(message, { primaryLabel, onPrimary, onDismiss, autoHideMs, glow } = {}) {
+  function makeToast(message, { primaryLabel, onPrimary, onDismiss, autoHideMs, glow, light, icon } = {}) {
     if (!root) return;
     const toast = document.createElement("div");
     toast.className = glow ? "toast glow" : "toast";
+    if (light) toast.classList.add("light");
+
+    if (icon) {
+      const iconWrap = document.createElement("span");
+      iconWrap.className = "toast-icon";
+      iconWrap.innerHTML = icon;
+      toast.appendChild(iconWrap);
+    }
+
     const text = document.createElement("span");
     text.textContent = message;
     toast.appendChild(text);
@@ -305,13 +324,14 @@
     });
   }
 
-  function showBreakpointReachedToast(label) {
-    makeToast(`Reached "${label}" — nice work! Take a break?`, {
+  function showBreakpointReachedToast() {
+    makeToast("Breakpoint reached — take a break?", {
       autoHideMs: 8000,
+      light: true,
+      icon: TICK_ICON,
     });
   }
 
-  // The "Side Cannons" preset from canvas-confetti (also what MagicUI's
   // Adapted from canvas-confetti's "Side Cannons" preset (also what
   // MagicUI's Confetti component wraps): two cannons firing for 3 seconds,
   // 2 particles per frame per side via requestAnimationFrame. Origin moved

@@ -174,7 +174,7 @@
       if (progressPct < heading.percent) return;
       state.reachedBreakpointLabels.add(heading.label);
       ui.spawnConfetti();
-      ui.showBreakpointReachedToast(heading.label);
+      ui.showBreakpointReachedToast();
     });
   }
 
