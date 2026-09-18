@@ -35,3 +35,20 @@ All data is stored locally via `chrome.storage.local` — no accounts, no sync.
 The confetti effect uses [canvas-confetti](https://github.com/catdad/canvas-confetti),
 vendored locally in `src/content/vendor/` — the only external dependency in
 this project.
+
+## Logo
+
+The icon is a bookmark with a progress stripe across it — the two things
+this extension actually does (mark a breakpoint, track reading progress) in
+one mark. Source is `icons/logo.svg`; `icons/icon16.png`, `icon48.png`, and
+`icon128.png` are rendered from it (`convert -background none icons/logo.svg
+-resize <N>x<N> icons/icon<N>.png`). The popup's small header mark
+(`src/popup/popup.html`) is the same shape, redrawn inline.
+
+The fill is a flat blue, not a gradient, deliberately: this environment has
+no proper SVG renderer (`rsvg-convert`/`inkscape` aren't installed), so
+`convert` falls back to ImageMagick's bundled minimal SVG parser, which
+doesn't reliably resolve `<linearGradient>` references — it silently
+rendered the background black instead of erroring. If you add gradients
+back to `logo.svg` later, re-render all three PNGs and actually open each
+one to confirm the fill resolved, rather than trusting a clean exit code.
