@@ -36,9 +36,20 @@
     pendingSave: null,
     growthTimer: null,
     timerEnabled: true,
-    timerElapsedMs: 0,
     timerStartedAt: null,
     timerManuallyPaused: false,
+    // This tab's reading time not yet folded into the shared global total in
+    // storage. Flushing adds this on top of whatever the total currently is
+    // (read fresh at flush time), rather than overwriting it with a locally
+    // cached baseline — that's what lets multiple tabs' contributions sum
+    // instead of the last tab to flush clobbering the others.
+    unflushedDeltaMs: 0,
+    timerFlushTicks: 0,
+    // Per-article-view counter — shown live in the pill, and also what the
+    // break nudge reads. Deliberately separate from the global lifetime
+    // total (which only lives in storage): resets on every enterPage(), so
+    // it always reflects "how long on *this* article", not the all-time sum.
+    sessionElapsedMs: 0,
     nudgeEnabled: true,
     lastScrollAt: 0,
     breakNudgeShown: false,
@@ -171,10 +182,12 @@
       "breakpoint:enabled",
       "breakpoint:timerEnabled",
       "breakpoint:nudgeEnabled",
+      "breakpoint:timerPaused",
     ]);
     state.enabled = data["breakpoint:enabled"] !== false;
     state.timerEnabled = data["breakpoint:timerEnabled"] !== false;
     state.nudgeEnabled = data["breakpoint:nudgeEnabled"] !== false;
+    state.timerManuallyPaused = !!data["breakpoint:timerPaused"];
   }
 
   function watchSettingsChanges() {
@@ -191,6 +204,24 @@
       }
       if (changes["breakpoint:nudgeEnabled"]) {
         state.nudgeEnabled = changes["breakpoint:nudgeEnabled"].newValue !== false;
+      }
+      if (changes["breakpoint:timerPaused"]) {
+        state.timerManuallyPaused = !!changes["breakpoint:timerPaused"].newValue;
+        refreshTimerRunState();
+      }
+      if (changes["breakpoint:timerTotalMs"]) {
+        // Only an explicit reset (value dropped to exactly 0, from the
+        // popup) should also discard this tab's own not-yet-flushed time.
+        // A normal incremental update from another tab must NOT clear it —
+        // this tab's contribution still needs to sum on top independently.
+        if (changes["breakpoint:timerTotalMs"].newValue === 0) {
+          state.unflushedDeltaMs = 0;
+          if (state.timerStartedAt) {
+            const now = Date.now();
+            state.sessionElapsedMs += now - state.timerStartedAt;
+            state.timerStartedAt = now;
+          }
+        }
       }
     });
   }
@@ -214,67 +245,55 @@
     if (shouldRun && !state.timerStartedAt) {
       state.timerStartedAt = Date.now();
     } else if (!shouldRun && state.timerStartedAt) {
-      state.timerElapsedMs += Date.now() - state.timerStartedAt;
+      const delta = Date.now() - state.timerStartedAt;
+      state.unflushedDeltaMs += delta;
+      state.sessionElapsedMs += delta;
       state.timerStartedAt = null;
+      flushGlobalTimer();
     }
   }
 
-  function getCurrentTimerElapsedMs() {
-    if (!state.timerStartedAt) return state.timerElapsedMs;
-    return state.timerElapsedMs + (Date.now() - state.timerStartedAt);
+  function getCurrentSessionElapsedMs() {
+    if (!state.timerStartedAt) return state.sessionElapsedMs;
+    return state.sessionElapsedMs + (Date.now() - state.timerStartedAt);
   }
 
-  function resetTimer() {
-    state.timerElapsedMs = 0;
-    state.timerStartedAt = null;
-    refreshTimerRunState();
+  // Adds this tab's not-yet-saved reading time on top of whatever the
+  // shared global total currently is (read fresh here, not from a locally
+  // cached copy), so two tabs reading at different times sum correctly
+  // instead of whichever flushes last overwriting the other's contribution.
+  async function flushGlobalTimer() {
+    if (state.timerStartedAt) {
+      const now = Date.now();
+      const delta = now - state.timerStartedAt;
+      state.unflushedDeltaMs += delta;
+      state.sessionElapsedMs += delta;
+      state.timerStartedAt = now;
+    }
+    const owed = state.unflushedDeltaMs;
+    if (owed <= 0) return;
+    state.unflushedDeltaMs = 0;
+    const data = await storageGet("breakpoint:timerTotalMs");
+    const current = data["breakpoint:timerTotalMs"] || 0;
+    await storageSet({ "breakpoint:timerTotalMs": current + owed });
   }
 
   // Fires once per article view: only once real reading time has piled up
-  // AND the reader isn't actively mid-scroll, so it lands in a natural lull
-  // rather than interrupting. See CLAUDE.md for why this is a toast this
-  // time despite the earlier heading-crossing nudge being removed — the
-  // trigger here is rare (once, time-based) rather than constant.
-  function maybeShowBreakNudge(elapsedMs) {
+  // on *this* view AND the reader isn't actively mid-scroll, so it lands in
+  // a natural lull rather than interrupting. Deliberately uses the
+  // per-session counter, not the lifetime total — otherwise, once your
+  // lifetime total ever crosses the threshold, this would fire on every
+  // single article you open forever. See CLAUDE.md for why this is a toast
+  // despite the earlier heading-crossing nudge being removed — the trigger
+  // here is rare (once, time-based) rather than constant.
+  function maybeShowBreakNudge() {
     if (state.breakNudgeShown) return;
     if (!state.enabled || !state.timerEnabled || !state.nudgeEnabled) return;
-    if (elapsedMs < BREAK_NUDGE_THRESHOLD_MS) return;
+    const sessionElapsed = getCurrentSessionElapsedMs();
+    if (sessionElapsed < BREAK_NUDGE_THRESHOLD_MS) return;
     if (Date.now() - state.lastScrollAt < SCROLL_IDLE_MS) return;
     state.breakNudgeShown = true;
-    ui.showBreakNudgeToast(Math.round(elapsedMs / 60000));
-  }
-
-  function watchTimerMessages() {
-    chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-      if (!message || typeof message.type !== "string" || !message.type.startsWith("timer:")) {
-        return;
-      }
-      if (message.type === "timer:getState") {
-        sendResponse({
-          onArticlePage: state.onArticlePage,
-          elapsedMs: getCurrentTimerElapsedMs(),
-          running: !!state.timerStartedAt,
-          manuallyPaused: state.timerManuallyPaused,
-        });
-        return;
-      }
-      if (message.type === "timer:pause") {
-        state.timerManuallyPaused = true;
-        refreshTimerRunState();
-        sendResponse({ ok: true });
-        return;
-      }
-      if (message.type === "timer:resume") {
-        state.timerManuallyPaused = false;
-        refreshTimerRunState();
-        sendResponse({ ok: true });
-        return;
-      }
-      if (message.type === "timer:reset") {
-        resetTimer();
-        sendResponse({ ok: true });
-      }
-    });
+    ui.showBreakNudgeToast(Math.round(sessionElapsed / 60000));
   }
 
   // Runs whenever we land on a page — both on the real initial load and on
@@ -299,11 +318,18 @@
       }, delay)
     );
     checkResumeOnLoad();
-    // Each article view is its own reading session for the timer and nudge.
-    state.timerManuallyPaused = false;
+    // The session timer (shown in the pill) resets per article view; the
+    // global lifetime total lives only in storage and is untouched here.
+    // Pause is a deliberate global setting, so it intentionally carries
+    // over across article navigation instead of auto-clearing.
     state.breakNudgeShown = false;
+    state.sessionElapsedMs = 0;
     state.lastScrollAt = Date.now();
-    resetTimer();
+    // Actually starts the clock now that we're on an article page — without
+    // this, timerStartedAt never gets set on a normal load and the running
+    // total silently never advances until some unrelated event (a settings
+    // change, a visibility toggle) happens to call this first.
+    refreshTimerRunState();
   }
 
   // Client-side (pushState/replaceState) navigation doesn't fire any event a
@@ -326,12 +352,21 @@
     watchSettingsChanges();
     watchForContentGrowth();
     watchForUrlChanges();
-    watchTimerMessages();
     setInterval(() => {
       if (!state.onArticlePage) return;
-      const elapsed = getCurrentTimerElapsedMs();
-      ui.updateTimer(elapsed, !!state.timerStartedAt);
-      maybeShowBreakNudge(elapsed);
+      // The pill shows this article view's own session time, not the
+      // global lifetime total — that one only shows in the popup.
+      ui.updateTimer(getCurrentSessionElapsedMs(), !!state.timerStartedAt);
+      maybeShowBreakNudge();
+      // Checkpoint the running total every few ticks (not every single one,
+      // to limit storage writes) so a long uninterrupted read doesn't lose
+      // progress if the tab crashes, and so the popup reflects reality
+      // quickly if reopened.
+      state.timerFlushTicks++;
+      if (state.timerFlushTicks >= 3) {
+        state.timerFlushTicks = 0;
+        if (state.timerStartedAt) flushGlobalTimer();
+      }
     }, 1000);
 
     enterPage();
@@ -346,7 +381,10 @@
       if (document.visibilityState === "hidden") flushSave();
       refreshTimerRunState();
     });
-    window.addEventListener("pagehide", flushSave);
+    window.addEventListener("pagehide", () => {
+      flushSave();
+      flushGlobalTimer();
+    });
   }
 
   setTimeout(init, 800);

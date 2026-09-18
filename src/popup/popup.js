@@ -42,44 +42,31 @@ nudgeEnabledToggle.addEventListener("change", () => {
 
 function formatElapsed(ms) {
   const totalSeconds = Math.floor(ms / 1000);
-  const mm = Math.floor(totalSeconds / 60);
+  const hh = Math.floor(totalSeconds / 3600);
+  const mm = Math.floor((totalSeconds % 3600) / 60);
   const ss = totalSeconds % 60;
+  if (hh > 0) return `${hh}:${String(mm).padStart(2, "0")}:${String(ss).padStart(2, "0")}`;
   return `${mm}:${String(ss).padStart(2, "0")}`;
 }
 
-async function sendTimerMessage(type) {
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (!tab || !tab.id) return null;
-  try {
-    return await chrome.tabs.sendMessage(tab.id, { type });
-  } catch {
-    return null;
-  }
-}
-
+// The timer is global now — total/paused state live in storage rather than
+// a specific tab's live memory, so the popup just reads/writes storage
+// directly instead of messaging the active tab.
 async function refreshTimerUI() {
-  const state = await sendTimerMessage("timer:getState");
-  if (!state || !state.onArticlePage) {
-    timerReadout.textContent = "—";
-    timerPauseResumeBtn.disabled = true;
-    timerResetBtn.disabled = true;
-    timerPauseResumeBtn.textContent = "Pause";
-    return;
-  }
-  timerReadout.textContent = formatElapsed(state.elapsedMs);
-  timerPauseResumeBtn.disabled = false;
-  timerResetBtn.disabled = false;
-  timerPauseResumeBtn.textContent = state.manuallyPaused ? "Resume" : "Pause";
+  const data = await storageGet(["breakpoint:timerTotalMs", "breakpoint:timerPaused"]);
+  timerReadout.textContent = formatElapsed(data["breakpoint:timerTotalMs"] || 0);
+  timerPauseResumeBtn.textContent = data["breakpoint:timerPaused"] ? "Resume" : "Pause";
 }
 
 timerPauseResumeBtn.addEventListener("click", async () => {
   const resuming = timerPauseResumeBtn.textContent === "Resume";
-  await sendTimerMessage(resuming ? "timer:resume" : "timer:pause");
+  await storageSet({ "breakpoint:timerPaused": !resuming });
   refreshTimerUI();
 });
 
 timerResetBtn.addEventListener("click", async () => {
-  await sendTimerMessage("timer:reset");
+  if (!confirm("Reset your lifetime reading timer to 0? This can't be undone.")) return;
+  await storageSet({ "breakpoint:timerTotalMs": 0 });
   refreshTimerUI();
 });
 

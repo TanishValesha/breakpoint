@@ -88,36 +88,59 @@ object — there's no module system or bundler, so load order matters:
    `onScroll`/resize/the growth-observer so they're inert while sitting on a
    non-article page between navigations.
 
-   **Reading timer**: tracks accumulated *active* reading time for the
-   current article view — `shouldTimerRun()` requires the tab visible, the
-   extension and timer both enabled, on an article page, and not manually
-   paused, and `refreshTimerRunState()` starts/stops the accumulator
-   whenever any of those inputs change (settings change, `visibilitychange`,
-   navigation). It resets to zero on every `enterPage()` — each article view
-   is its own session, nothing is persisted to storage. A `setInterval`
-   ticks `ui.updateTimer()` every second while on an article page.
+   **Reading timer — two deliberately separate counters**:
+   - `state.sessionElapsedMs` tracks active time on *this article view only*
+     and resets on every `enterPage()`. This is what the pill displays live
+     (`ui.updateTimer`) and what the break nudge reads — a global lifetime
+     number can't drive the nudge, since once it ever crosses the threshold
+     it would stay crossed forever and fire on every single article.
+   - The lifetime total lives *only* in `chrome.storage.local`
+     (`breakpoint:timerTotalMs`) — no tab keeps a local copy of "the total"
+     in memory, specifically to avoid one tab's stale view of it clobbering
+     another's. Each tab instead tracks `state.unflushedDeltaMs` — the time
+     *this tab* owes the shared total since its last flush — and
+     `flushGlobalTimer()` adds that on top of a value it re-reads from
+     storage at flush time (`current + owed`), not a cached baseline. That
+     add-on-top-of-a-fresh-read is what lets two tabs reading at different
+     times actually sum instead of one overwriting the other. It's still not
+     a fully coordinated single clock (a background service worker would be
+     needed for that, which this project has deliberately avoided), but it
+     no longer loses a tab's contribution just because another tab flushed
+     — only two tabs flushing at the *exact* same instant can still race.
 
-   **Break-reminder nudge**: `maybeShowBreakNudge()` runs from that same
-   1-second tick and fires `ui.showBreakNudgeToast()` (a toast with a
-   pulsing glow animation, `prefers-reduced-motion`-aware) once per article
-   view, only when *both* the timer has crossed `BREAK_NUDGE_THRESHOLD_MS`
-   (15 min) *and* `state.lastScrollAt` (updated on every scroll event) is
-   more than `SCROLL_IDLE_MS` (2.5s) in the past — i.e. only in a natural
-   pause, not mid-scroll. Gated by its own `breakpoint:nudgeEnabled` setting,
-   independent of the timer's on/off toggle, so the readout can stay on
-   without the nudge. `state.breakNudgeShown` resets in `enterPage()`
-   alongside the timer.
+   `shouldTimerRun()` requires the tab visible, the extension and timer both
+   enabled, on an article page, and not paused (`breakpoint:timerPaused`,
+   global/persisted — pausing from the popup affects every tab, and
+   deliberately survives article navigation rather than auto-clearing).
+   `refreshTimerRunState()` starts/stops the running segment; on every stop
+   transition it folds the segment into both `sessionElapsedMs` and
+   `unflushedDeltaMs` and calls `flushGlobalTimer()`. A periodic checkpoint
+   also runs every ~3s while continuously reading, plus one on `pagehide`,
+   so a crash doesn't lose a long uninterrupted session. An explicit reset
+   from the popup (`breakpoint:timerTotalMs` set to exactly `0`) is the one
+   case where `chrome.storage.onChanged` also clears `unflushedDeltaMs` —
+   any other change to that key (another tab's own flush) is left alone.
+
+   **Break-reminder nudge**: `maybeShowBreakNudge()` runs from the same
+   1-second tick as the timer display and fires `ui.showBreakNudgeToast()`
+   (a toast with a pulsing glow animation, `prefers-reduced-motion`-aware)
+   once per article view, only when *both* `sessionElapsedMs` has crossed
+   `BREAK_NUDGE_THRESHOLD_MS` (15 min) *and* `state.lastScrollAt` (updated on
+   every scroll event) is more than `SCROLL_IDLE_MS` (2.5s) in the past —
+   i.e. only in a natural pause, not mid-scroll. Gated by its own
+   `breakpoint:nudgeEnabled` setting, independent of the timer's on/off
+   toggle. `state.breakNudgeShown` resets in `enterPage()` alongside
+   `sessionElapsedMs`.
 
 `src/popup/` (popup.html/js/css) is a separate, independent UI: the on/off
-toggle, the reading queue, and the timer's pause/resume/reset controls. It
-talks to `chrome.storage.local` directly for settings/queue, but the timer
-controls need to act on *this specific tab's* live, in-memory state, which
-storage can't scope to one tab — so the popup instead messages the active
-tab's content script directly via `chrome.tabs.sendMessage`/
-`chrome.runtime.onMessage` (`timer:getState` / `timer:pause` / `timer:resume`
-/ `timer:reset`), the first and only place this codebase does popup↔content-
-script messaging rather than going through shared storage. No extra
-manifest permission was needed — `activeTab` already covers it.
+toggle, the reading queue, and the timer's enable/pause/resume/reset
+controls. All of it — including the timer, now that it's global — is
+plain `chrome.storage.local` reads/writes, the same pattern as every other
+setting. (An earlier version of the timer was per-tab, in-memory-only state,
+which needed `chrome.tabs.sendMessage`/`chrome.runtime.onMessage` for the
+popup to control it — that messaging path no longer exists now that the
+timer lives in storage; don't reintroduce it unless a future per-tab-only
+control genuinely needs it again.)
 
 ### Storage keys (all in `chrome.storage.local`)
 
@@ -126,6 +149,9 @@ manifest permission was needed — `activeTab` already covers it.
 - `breakpoint:timerEnabled` / `breakpoint:nudgeEnabled` (bool) — global,
   independent on/off switches for the reading-timer readout and the
   break-reminder toast, respectively.
+- `breakpoint:timerTotalMs` (number) — the lifetime reading-timer total;
+  grows forever until reset from the popup.
+- `breakpoint:timerPaused` (bool) — global pause for the lifetime timer.
 - `breakpoint:queue` — global array of `{ url, title, addedAt }`.
 - `bp:<origin+pathname>` — per-article auto-saved resume position
   (`{ url, title, percent, scrollY, updatedAt }`); pruned periodically

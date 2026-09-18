@@ -94,7 +94,7 @@
       <div class="bar-track"><div class="bar-fill"></div></div>
       <div class="pill">
         <span class="pill-text">0% · -- min left</span>
-        <span class="pill-timer">${CLOCK_ICON}<span class="pill-timer-text">0:00</span></span>
+        <span class="pill-timer" title="Time spent on this article — see the popup for your all-time total">${CLOCK_ICON}<span class="pill-timer-text">0:00</span></span>
       </div>
       <div class="toast-stack"></div>
     `;
@@ -127,9 +127,13 @@
   function updateTimer(elapsedMs, running) {
     if (!root) return;
     const totalSeconds = Math.floor(elapsedMs / 1000);
-    const mm = Math.floor(totalSeconds / 60);
+    const hh = Math.floor(totalSeconds / 3600);
+    const mm = Math.floor((totalSeconds % 3600) / 60);
     const ss = totalSeconds % 60;
-    els.pillTimerText.textContent = `${mm}:${String(ss).padStart(2, "0")}`;
+    els.pillTimerText.textContent =
+      hh > 0
+        ? `${hh}:${String(mm).padStart(2, "0")}:${String(ss).padStart(2, "0")}`
+        : `${mm}:${String(ss).padStart(2, "0")}`;
     els.pillTimer.classList.toggle("paused", !running);
   }
 

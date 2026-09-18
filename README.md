@@ -15,10 +15,13 @@ time remaining, so you know when a good moment to take a break is.
 
 - Live reading-progress bar against the detected article content.
 - Estimated time remaining (word count ÷ ~200 WPM).
-- Reading timer: tracks active time spent on the current article (shown in
-  the pill), with pause/resume/reset controls in the popup.
-- Break reminder: after 15 minutes of active reading, once you pause
-  scrolling, a one-time toast suggests it's a good time for a break.
+- Reading timer: the pill shows active time spent on the *current* article;
+  the popup separately shows your all-time total across every article,
+  which keeps growing until you reset it — with enable/pause/resume/reset
+  controls there.
+- Break reminder: after 15 minutes of active reading on one article, once
+  you pause scrolling, a one-time toast suggests it's a good time for a
+  break.
 - Auto-saved scroll position with a "Resume reading?" prompt on revisit.
 - Reading queue: add the current page from the popup, open or remove later.
 
