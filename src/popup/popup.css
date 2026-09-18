@@ -204,7 +204,7 @@ input[type="checkbox"]:focus-visible {
   outline-offset: 2px;
 }
 
-#queue-list {
+.entry-list {
   list-style: none;
   margin: 0;
   padding: 0;
@@ -212,7 +212,7 @@ input[type="checkbox"]:focus-visible {
   overflow-y: auto;
 }
 
-#queue-list li {
+.entry-list li {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -223,11 +223,11 @@ input[type="checkbox"]:focus-visible {
   transition: background 100ms ease-out;
 }
 
-#queue-list li:not(.empty):hover {
+.entry-list li:not(.empty):hover {
   background: #f0f1f3;
 }
 
-#queue-list a {
+.entry-label {
   color: #1f2937;
   text-decoration: none;
   overflow: hidden;
@@ -236,12 +236,12 @@ input[type="checkbox"]:focus-visible {
   flex: 1;
 }
 
-#queue-list a:hover {
+a.entry-label:hover {
   text-decoration: underline;
   text-underline-offset: 2px;
 }
 
-#queue-list button {
+.entry-list button {
   all: unset;
   cursor: pointer;
   opacity: 0.5;
@@ -251,13 +251,52 @@ input[type="checkbox"]:focus-visible {
   transition: opacity 100ms ease-out;
 }
 
-#queue-list button:hover {
+.entry-list button:hover {
   opacity: 1;
 }
 
+.disabled-site-input-row {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+#disabled-site-input {
+  flex: 1;
+  width: 0;
+  font-size: 12px;
+  padding: 5px 7px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background: #fff;
+  color: #1f2937;
+}
+
+#disabled-site-input:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 1px;
+}
+
+#disabled-site-add {
+  font-size: 11px;
+  border: none;
+  background: #2563eb;
+  color: #fff;
+  border-radius: 6px;
+  padding: 4px 10px;
+  cursor: pointer;
+  transition: background 100ms ease-out;
+  flex-shrink: 0;
+}
+
+#disabled-site-add:hover {
+  background: #1d4ed8;
+}
+
 .section-header button:focus-visible,
-#queue-list a:focus-visible,
-#queue-list button:focus-visible {
+.entry-list a:focus-visible,
+.entry-list button:focus-visible,
+#disabled-site-add:focus-visible {
   outline: 2px solid #2563eb;
   outline-offset: 2px;
 }

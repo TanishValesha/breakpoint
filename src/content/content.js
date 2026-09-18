@@ -30,8 +30,18 @@
     return path === "/" || path === "";
   }
 
+  // User-managed escape hatch (popup: "Disabled sites") for when the
+  // Arc90-style scorer in article-detect.js mistakes a non-article page
+  // (Gmail, GitHub, etc.) for an article. Matched by exact hostname —
+  // pasting the real address-bar URL always works; a guessed domain like
+  // "gmail.com" won't match the real hostname "mail.google.com".
+  function isDisabledSite() {
+    return state.disabledSites.includes(location.hostname.toLowerCase());
+  }
+
   const state = {
     enabled: true,
+    disabledSites: [],
     onArticlePage: false,
     articleEl: null,
     articleTop: 0,
@@ -305,12 +315,14 @@
       "breakpoint:nudgeEnabled",
       "breakpoint:nudgeThresholdMs",
       "breakpoint:timerPaused",
+      "breakpoint:disabledSites",
     ]);
     state.enabled = data["breakpoint:enabled"] !== false;
     state.timerEnabled = data["breakpoint:timerEnabled"] !== false;
     state.nudgeEnabled = data["breakpoint:nudgeEnabled"] !== false;
     state.nudgeThresholdMs = data["breakpoint:nudgeThresholdMs"] || DEFAULT_NUDGE_THRESHOLD_MS;
     state.timerManuallyPaused = !!data["breakpoint:timerPaused"];
+    state.disabledSites = data["breakpoint:disabledSites"] || [];
   }
 
   function watchSettingsChanges() {
@@ -335,6 +347,12 @@
       if (changes["breakpoint:timerPaused"]) {
         state.timerManuallyPaused = !!changes["breakpoint:timerPaused"].newValue;
         refreshTimerRunState();
+      }
+      if (changes["breakpoint:disabledSites"]) {
+        // Re-enters the page so a site just added/removed from the popup
+        // takes effect immediately, not just on the next navigation.
+        state.disabledSites = changes["breakpoint:disabledSites"].newValue || [];
+        enterPage();
       }
       if (changes["breakpoint:timerTotalMs"]) {
         // Only an explicit reset (value dropped to exactly 0, from the
@@ -429,7 +447,7 @@
   // every client-side navigation an SPA like Medium does afterwards, since
   // those never reload the document (see watchForUrlChanges).
   function enterPage() {
-    if (isHomePage()) {
+    if (isHomePage() || isDisabledSite()) {
       state.onArticlePage = false;
       ui.setVisible(false);
       refreshTimerRunState();

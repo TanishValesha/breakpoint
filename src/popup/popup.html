@@ -21,6 +21,17 @@
 
     <div class="section">
       <div class="section-header">
+        <span>Disabled sites</span>
+      </div>
+      <div class="disabled-site-input-row">
+        <input type="text" id="disabled-site-input" placeholder="Paste a link, e.g. github.com" />
+        <button id="disabled-site-add">+ Add</button>
+      </div>
+      <ul id="disabled-sites-list" class="entry-list"></ul>
+    </div>
+
+    <div class="section">
+      <div class="section-header">
         <span>Reading timer (all-time)</span>
         <input type="checkbox" id="timer-enabled-toggle" title="Show timer" />
       </div>
@@ -50,7 +61,7 @@
         <span>Reading queue</span>
         <button id="add-current">+ Add this page</button>
       </div>
-      <ul id="queue-list"></ul>
+      <ul id="queue-list" class="entry-list"></ul>
     </div>
 
     <script src="popup.js"></script>

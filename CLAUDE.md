@@ -130,6 +130,29 @@ object — there's no module system or bundler, so load order matters:
    `onScroll`/resize/the growth-observer so they're inert while sitting on a
    non-article page between navigations.
 
+   **User-disabled sites**: the same `isHomePage()` early-return in
+   `enterPage()` also checks `isDisabledSite()` — `state.disabledSites`,
+   an array of hostnames the user pasted into the popup's "Disabled sites"
+   list, persisted to `breakpoint:disabledSites`. This exists because the
+   Arc90-style scorer in `article-detect.js` is a best-effort guess across
+   arbitrary sites and can score a large text block on a non-article page
+   (Gmail, GitHub, etc.) as "article-shaped," so the widget — and the
+   reading timer with it — starts running somewhere it shouldn't. Rather
+   than trying to make the heuristic reject every such site by name
+   (unbounded, always one site behind, and the same shape of problem that
+   got the earlier auto-breakpoints feature removed), the user gets a
+   direct escape hatch instead: paste a link, and that hostname goes
+   through the *exact same* branch as `isHomePage()` — no progress bar, no
+   pill, no timer, no nudge, no breakpoints panel, no detection work at
+   all, not a softer or partial version of "off." Matching is exact
+   hostname only (`location.hostname`, lowercased) — pasting a real
+   address-bar URL always works; a guessed domain like `gmail.com` won't
+   match the real hostname `mail.google.com`, which is why the popup's
+   placeholder text says to paste a link rather than type a domain.
+   `chrome.storage.onChanged` re-runs `enterPage()` on a change to this key
+   so toggling a site from the popup takes effect immediately rather than
+   waiting for the next navigation.
+
    **Reading timer — two deliberately separate counters**:
    - `state.sessionElapsedMs` tracks active time on *this article view only*
      and resets on every `enterPage()`. This is what the pill displays live
@@ -188,8 +211,9 @@ object — there's no module system or bundler, so load order matters:
    on/off toggle.
 
 `src/popup/` (popup.html/js/css) is a separate, independent UI: the on/off
-toggle, the reading queue, and the timer's enable/pause/resume/reset
-controls. All of it — including the timer, now that it's global — is
+toggle, the disabled-sites list, the reading queue, and the timer's
+enable/pause/resume/reset controls. All of it — including the timer, now
+that it's global — is
 plain `chrome.storage.local` reads/writes, the same pattern as every other
 setting. (An earlier version of the timer was per-tab, in-memory-only state,
 which needed `chrome.tabs.sendMessage`/`chrome.runtime.onMessage` for the
@@ -209,6 +233,9 @@ control genuinely needs it again.)
 - `breakpoint:timerTotalMs` (number) — the lifetime reading-timer total;
   grows forever until reset from the popup.
 - `breakpoint:timerPaused` (bool) — global pause for the lifetime timer.
+- `breakpoint:disabledSites` — global array of lowercase hostnames the user
+  pasted into the popup; the whole extension is inert on any matching site
+  (see "User-disabled sites" above).
 - `breakpoint:queue` — global array of `{ url, title, addedAt }`.
 - `bp:<origin+pathname>` — per-article auto-saved resume position
   (`{ url, title, percent, scrollY, updatedAt }`); pruned periodically
