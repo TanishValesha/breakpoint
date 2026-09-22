@@ -29,9 +29,10 @@ time remaining, so you know when a good moment to take a break is.
   Scroll past one you've saved and it celebrates with a confetti cannon
   from each side of the screen plus a toast suggesting a break.
 - Reading queue: add the current page from the popup, open or remove later.
-- Disabled sites: paste a link (e.g. `github.com`) in the popup and the
-  extension goes fully inert there — no bar, pill, timer, or nudges — for
-  when the article detector mistakes a site like Gmail or GitHub for one.
+- Disabled sites: paste a link (e.g. `github.com`), or just hit "Disable
+  this site" in the popup to block whatever's open right now — the
+  extension goes fully inert there, no bar/pill/timer/nudges, for when the
+  article detector mistakes a site like Gmail or GitHub for one.
 
 All data is stored locally via `chrome.storage.local` — no accounts, no sync.
 

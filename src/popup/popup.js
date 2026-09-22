@@ -21,6 +21,7 @@ const queueListEl = document.getElementById("queue-list");
 const disabledSiteInput = document.getElementById("disabled-site-input");
 const disabledSiteAddBtn = document.getElementById("disabled-site-add");
 const disabledSitesListEl = document.getElementById("disabled-sites-list");
+const disableCurrentBtn = document.getElementById("disable-current");
 const nudgePresetButtons = Array.from(document.querySelectorAll(".preset-btn"));
 
 async function loadSettings() {
@@ -212,9 +213,7 @@ async function renderDisabledSites() {
   });
 }
 
-async function addDisabledSite() {
-  const hostname = parseHostname(disabledSiteInput.value);
-  disabledSiteInput.value = "";
+async function commitDisabledSite(hostname) {
   if (!hostname) return;
   const sites = await loadDisabledSites();
   if (sites.includes(hostname)) return;
@@ -223,9 +222,23 @@ async function addDisabledSite() {
   renderDisabledSites();
 }
 
+async function addDisabledSite() {
+  const hostname = parseHostname(disabledSiteInput.value);
+  disabledSiteInput.value = "";
+  await commitDisabledSite(hostname);
+}
+
 disabledSiteAddBtn.addEventListener("click", addDisabledSite);
 disabledSiteInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter") addDisabledSite();
+});
+
+// Same activeTab-gated tab lookup the queue's "+ Add this page" button
+// already relies on — no extra permission needed.
+disableCurrentBtn.addEventListener("click", async () => {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!tab || !tab.url) return;
+  await commitDisabledSite(parseHostname(tab.url));
 });
 
 loadSettings();

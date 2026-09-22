@@ -151,7 +151,12 @@ object — there's no module system or bundler, so load order matters:
    placeholder text says to paste a link rather than type a domain.
    `chrome.storage.onChanged` re-runs `enterPage()` on a change to this key
    so toggling a site from the popup takes effect immediately rather than
-   waiting for the next navigation.
+   waiting for the next navigation. The popup also has a "Disable this
+   site" button next to the paste input, for the common case of wanting to
+   block whatever site is open right now — it reads the active tab's URL
+   via `chrome.tabs.query` (the same `activeTab`-gated lookup the reading
+   queue's "+ Add this page" button already uses, no extra permission) and
+   feeds it through the same hostname-parsing/dedupe path as a pasted link.
 
    **Reading timer — two deliberately separate counters**:
    - `state.sessionElapsedMs` tracks active time on *this article view only*
